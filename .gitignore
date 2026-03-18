@@ -1,0 +1,9 @@
+# Node dependencies
+node_modules/
+
+# Optional (recommended)
+npm-debug.log
+yarn-error.log
+.env
+dist/
+build/node_modules

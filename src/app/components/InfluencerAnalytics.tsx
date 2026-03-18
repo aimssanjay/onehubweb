@@ -1,0 +1,560 @@
+import { useState } from 'react';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Instagram, Music, Youtube, Edit, Save, Plus, Trash2 } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+type PlatformType = 'instagram' | 'tiktok' | 'youtube';
+
+interface PlatformMetrics {
+  followers: string;
+  avgViews: string;
+  engagement: string;
+}
+
+interface LocationData {
+  country: string;
+  percentage: string;
+}
+
+interface AgeData {
+  range: string;
+  percentage: string;
+}
+
+interface AnalyticsState {
+  instagram: PlatformMetrics;
+  tiktok: PlatformMetrics;
+  youtube: PlatformMetrics;
+  audienceLocation: LocationData[];
+  audienceAge: AgeData[];
+  audienceGender: {
+    female: string;
+    male: string;
+  };
+}
+
+// List of countries for dropdown
+const COUNTRIES = [
+  'United States',
+  'United Kingdom',
+  'Canada',
+  'Australia',
+  'Brazil',
+  'Germany',
+  'France',
+  'Spain',
+  'Italy',
+  'Mexico',
+  'India',
+  'Japan',
+  'South Korea',
+  'China',
+  'Netherlands',
+  'Sweden',
+  'Norway',
+  'Denmark',
+  'Finland',
+  'Switzerland',
+  'Austria',
+  'Belgium',
+  'Poland',
+  'Russia',
+  'Turkey',
+  'Argentina',
+  'Chile',
+  'Colombia',
+  'Peru',
+  'Venezuela',
+  'South Africa',
+  'Nigeria',
+  'Egypt',
+  'Kenya',
+  'Morocco',
+  'Thailand',
+  'Vietnam',
+  'Philippines',
+  'Indonesia',
+  'Malaysia',
+  'Singapore',
+  'New Zealand',
+  'Ireland',
+  'Portugal',
+  'Greece',
+  'Czech Republic',
+  'Hungary',
+  'Romania',
+  'Ukraine',
+  'Saudi Arabia',
+  'UAE',
+  'Israel',
+  'Pakistan',
+  'Bangladesh',
+  'Other',
+];
+
+export function InfluencerAnalytics() {
+  const [activePlatform, setActivePlatform] = useState<PlatformType>('instagram');
+  const [isEditingMetrics, setIsEditingMetrics] = useState(false);
+  const [isEditingDemographics, setIsEditingDemographics] = useState(false);
+
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsState>({
+    instagram: {
+      followers: '1.5M',
+      avgViews: '250k',
+      engagement: '5.0%',
+    },
+    tiktok: {
+      followers: '850k',
+      avgViews: '500k',
+      engagement: '7.2%',
+    },
+    youtube: {
+      followers: '2.3M',
+      avgViews: '1.2M',
+      engagement: '4.5%',
+    },
+    audienceLocation: [
+      { country: 'United States', percentage: '60' },
+      { country: 'United Kingdom', percentage: '16' },
+      { country: 'Brazil', percentage: '62' },
+      { country: 'Other', percentage: '10' },
+    ],
+    audienceAge: [
+      { range: '13-17', percentage: '60' },
+      { range: '18-24', percentage: '62' },
+      { range: '25-34', percentage: '18' },
+      { range: '35-44', percentage: '4' },
+      { range: '45-64', percentage: '1' },
+    ],
+    audienceGender: {
+      female: '70',
+      male: '30',
+    },
+  });
+
+  const handleSaveMetrics = () => {
+    // Save to localStorage or backend
+    localStorage.setItem('influencer_analytics', JSON.stringify(analyticsData));
+    setIsEditingMetrics(false);
+  };
+
+  const handleSaveDemographics = () => {
+    // Save to localStorage or backend
+    localStorage.setItem('influencer_analytics', JSON.stringify(analyticsData));
+    setIsEditingDemographics(false);
+  };
+
+  const updateMetric = (platform: PlatformType, field: keyof PlatformMetrics, value: string) => {
+    setAnalyticsData(prev => ({
+      ...prev,
+      [platform]: {
+        ...prev[platform],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateLocation = (index: number, field: keyof LocationData, value: string) => {
+    setAnalyticsData(prev => {
+      const newLocations = [...prev.audienceLocation];
+      newLocations[index] = { ...newLocations[index], [field]: value };
+      return { ...prev, audienceLocation: newLocations };
+    });
+  };
+
+  const addLocation = () => {
+    setAnalyticsData(prev => ({
+      ...prev,
+      audienceLocation: [...prev.audienceLocation, { country: '', percentage: '' }],
+    }));
+  };
+
+  const removeLocation = (index: number) => {
+    setAnalyticsData(prev => ({
+      ...prev,
+      audienceLocation: prev.audienceLocation.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateAge = (index: number, value: string) => {
+    setAnalyticsData(prev => {
+      const newAges = [...prev.audienceAge];
+      newAges[index] = { ...newAges[index], percentage: value };
+      return { ...prev, audienceAge: newAges };
+    });
+  };
+
+  const updateGender = (field: 'female' | 'male', value: string) => {
+    setAnalyticsData(prev => ({
+      ...prev,
+      audienceGender: {
+        ...prev.audienceGender,
+        [field]: value,
+      },
+    }));
+  };
+
+  const platforms = [
+    { id: 'instagram' as PlatformType, name: 'Instagram', icon: Instagram },
+    { id: 'tiktok' as PlatformType, name: 'TikTok', icon: Music },
+    { id: 'youtube' as PlatformType, name: 'YouTube', icon: Youtube },
+  ];
+
+  const currentMetrics = analyticsData[activePlatform];
+
+  // Prepare data for charts
+  const ageChartData = analyticsData.audienceAge.map(item => ({
+    age: item.range,
+    value: parseInt(item.percentage) || 0,
+  }));
+
+  const genderChartData = [
+    { name: 'Female', value: parseInt(analyticsData.audienceGender.female) || 0 },
+    { name: 'Male', value: parseInt(analyticsData.audienceGender.male) || 0 },
+  ];
+
+  const COLORS = {
+    female: '#8B7BE8',
+    male: '#E0E0E0',
+    bars: '#6B8EFF',
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Analytics</h1>
+      </div>
+
+      {/* Platform Metrics Section */}
+      <div className="bg-black rounded-xl p-4 md:p-8 border border-gray-800 mb-6 md:mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
+          <h2 className="text-xl md:text-2xl font-bold text-white">Platform Metrics</h2>
+          {isEditingMetrics ? (
+            <Button
+              onClick={handleSaveMetrics}
+              className="bg-primary hover:bg-secondary text-black font-medium w-full sm:w-auto text-sm md:text-base"
+              size="sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Changes
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setIsEditingMetrics(true)}
+              className="bg-white hover:bg-gray-100 text-black font-medium w-full sm:w-auto text-sm md:text-base"
+              size="sm"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+          )}
+        </div>
+
+        {/* Platform Tabs */}
+        <div className="flex gap-2 md:gap-4 mb-6 md:mb-8 border-b border-gray-800 overflow-x-auto">
+          {platforms.map((platform) => {
+            const Icon = platform.icon;
+            return (
+              <button
+                key={platform.id}
+                onClick={() => setActivePlatform(platform.id)}
+                className={`flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 border-b-2 transition-colors whitespace-nowrap ${
+                  activePlatform === platform.id
+                    ? 'border-primary text-white'
+                    : 'border-transparent text-gray-400 hover:text-white'
+                }`}
+              >
+                <Icon className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="font-medium text-sm md:text-base">{platform.name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          {/* Followers */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Followers</label>
+            {isEditingMetrics ? (
+              <Input
+                value={currentMetrics.followers}
+                onChange={(e) => updateMetric(activePlatform, 'followers', e.target.value)}
+                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                placeholder="e.g., 1.5M"
+              />
+            ) : (
+              <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.followers}</p>
+            )}
+          </div>
+
+          {/* Average Views */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Average Views</label>
+            {isEditingMetrics ? (
+              <Input
+                value={currentMetrics.avgViews}
+                onChange={(e) => updateMetric(activePlatform, 'avgViews', e.target.value)}
+                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                placeholder="e.g., 250k"
+              />
+            ) : (
+              <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.avgViews}</p>
+            )}
+          </div>
+
+          {/* Engagement */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Engagement</label>
+            {isEditingMetrics ? (
+              <Input
+                value={currentMetrics.engagement}
+                onChange={(e) => updateMetric(activePlatform, 'engagement', e.target.value)}
+                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                placeholder="e.g., 5.0%"
+              />
+            ) : (
+              <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.engagement}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Demographics Section */}
+      <div className="bg-black rounded-xl p-4 md:p-8 border border-gray-800">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
+          <h2 className="text-xl md:text-2xl font-bold text-white">Audience Demographics</h2>
+          {isEditingDemographics ? (
+            <Button
+              onClick={handleSaveDemographics}
+              className="bg-primary hover:bg-secondary text-black font-medium w-full sm:w-auto text-sm md:text-base"
+              size="sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Changes
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setIsEditingDemographics(true)}
+              className="bg-white hover:bg-gray-100 text-black font-medium w-full sm:w-auto text-sm md:text-base"
+              size="sm"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+          {/* Audience Location */}
+          <div>
+            <h3 className="text-lg md:text-xl font-bold text-white mb-4 md:mb-6">Audience Location</h3>
+            
+            {isEditingDemographics ? (
+              <div className="space-y-3 md:space-y-4">
+                {analyticsData.audienceLocation.map((location, index) => (
+                  <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3">
+                    <select
+                      value={location.country}
+                      onChange={(e) => updateLocation(index, 'country', e.target.value)}
+                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 md:px-4 py-2 md:py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm md:text-base"
+                    >
+                      <option value="">Select country...</option>
+                      {COUNTRIES.map((country) => (
+                        <option key={country} value={country}>
+                          {country}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={location.percentage}
+                        onChange={(e) => updateLocation(index, 'percentage', e.target.value)}
+                        className="bg-gray-900 border-gray-700 text-white w-20 md:w-24 text-sm md:text-base"
+                        placeholder="60"
+                        type="number"
+                      />
+                      <span className="text-gray-400">%</span>
+                      {analyticsData.audienceLocation.length > 1 && (
+                        <button
+                          onClick={() => removeLocation(index)}
+                          className="p-2 text-red-400 hover:bg-red-950 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={addLocation}
+                  className="w-full bg-transparent border-2 border-gray-700 text-white hover:bg-gray-900 rounded-lg px-3 md:px-4 py-2 md:py-3 flex items-center justify-center gap-2 font-medium transition-colors text-sm md:text-base"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Country
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 md:space-y-4">
+                {analyticsData.audienceLocation.map((location, index) => (
+                  <div key={index}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-white font-medium text-sm md:text-base">{location.country}</span>
+                      <span className="text-primary font-bold text-sm md:text-base">{location.percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-800 rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{ width: `${location.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Audience Age */}
+          <div>
+            <h3 className="text-lg md:text-xl font-bold text-white mb-4 md:mb-6">Audience Age</h3>
+            
+            {isEditingDemographics ? (
+              <div className="space-y-3 md:space-y-4">
+                {analyticsData.audienceAge.map((age, index) => (
+                  <div key={index} className="flex items-center gap-3 md:gap-4">
+                    <span className="text-white w-16 md:w-20 text-sm md:text-base">{age.range}</span>
+                    <Input
+                      value={age.percentage}
+                      onChange={(e) => updateAge(index, e.target.value)}
+                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      placeholder="60"
+                      type="number"
+                    />
+                    <span className="text-gray-400">%</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={ageChartData}>
+                  <XAxis 
+                    dataKey="age" 
+                    stroke="#9CA3AF"
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
+                  />
+                  <YAxis 
+                    stroke="#9CA3AF"
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#FFFFFF',
+                    }}
+                  />
+                  <Bar dataKey="value" fill={COLORS.bars} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Audience Gender */}
+          <div className="lg:col-span-2">
+            <h3 className="text-lg md:text-xl font-bold text-white mb-4 md:mb-6">Audience Gender</h3>
+            
+            {isEditingDemographics ? (
+              <div className="grid grid-cols-2 gap-4 md:gap-6 max-w-md">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Female</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={analyticsData.audienceGender.female}
+                      onChange={(e) => updateGender('female', e.target.value)}
+                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      placeholder="70"
+                      type="number"
+                    />
+                    <span className="text-gray-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Male</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={analyticsData.audienceGender.male}
+                      onChange={(e) => updateGender('male', e.target.value)}
+                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      placeholder="30"
+                      type="number"
+                    />
+                    <span className="text-gray-400">%</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
+                <ResponsiveContainer width="100%" height={200} className="md:w-2/5">
+                  <PieChart>
+                    <Pie
+                      data={genderChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      <Cell fill={COLORS.female} />
+                      <Cell fill={COLORS.male} />
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#1F2937',
+                        border: '1px solid #374151',
+                        borderRadius: '8px',
+                        color: '#FFFFFF',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-3 md:space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.female }} />
+                    <span className="text-white text-sm md:text-base">Female</span>
+                    <span className="text-primary font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.female}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.male }} />
+                    <span className="text-white text-sm md:text-base">Male</span>
+                    <span className="text-gray-400 font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.male}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {isEditingDemographics && (
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mt-6 md:mt-8 pt-6 md:pt-8 border-t border-gray-800">
+            <Button
+              onClick={handleSaveDemographics}
+              className="bg-primary hover:bg-secondary text-black font-medium text-sm md:text-base"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Demographics
+            </Button>
+            <Button
+              onClick={() => setIsEditingDemographics(false)}
+              className="bg-white hover:bg-gray-100 text-black font-medium text-sm md:text-base"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
