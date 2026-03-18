@@ -1,8 +1,23 @@
 {
-  "name": "@figma/my-make-file",
-  "private": true,
+  "name": "onehub",
   "version": "0.0.1",
+  "private": true,
+  "description": "This is a code bundle for onehub uae. The original project is available at https://www.figma.com/design/3oOh906oUixblFKCbg358K/onehub-uae.",
+  "keywords": [
+    "onehub"
+  ],
+  "homepage": "https://github.com/aimssanjay/onehubweb#readme",
+  "bugs": {
+    "url": "https://github.com/aimssanjay/onehubweb/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aimssanjay/onehubweb.git"
+  },
+  "license": "ISC",
+  "author": "Rewind Dev",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "build": "vite build",
     "dev": "vite"
