@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OneHub — API Integration Summary</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #1a1a1a;
+      background: #fff;
+      padding: 40px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Cover */
+    .cover {
+      text-align: center;
+      padding: 60px 0 50px;
+      border-bottom: 3px solid #D4AF37;
+      margin-bottom: 40px;
+    }
+    .cover .badge {
+      display: inline-block;
+      background: #D4AF37;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+    }
+    .cover h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: #111;
+      margin-bottom: 10px;
+    }
+    .cover h1 span { color: #D4AF37; }
+    .cover p {
+      font-size: 14px;
+      color: #666;
+    }
+    .cover .meta {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin-top: 24px;
+      font-size: 12px;
+      color: #888;
+    }
+    .cover .meta strong { color: #333; }
+
+    /* Section */
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111;
+      border-left: 4px solid #D4AF37;
+      padding-left: 12px;
+      margin: 36px 0 16px;
+    }
+    h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #333;
+      margin: 20px 0 8px;
+    }
+    p { line-height: 1.7; color: #444; margin-bottom: 10px; }
+
+    /* API Boxes */
+    .api-box {
+      background: #f9f6ee;
+      border: 1px solid #e8d98a;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+    }
+    .api-box .method {
+      display: inline-block;
+      background: #D4AF37;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .api-box .url {
+      font-family: monospace;
+      font-size: 12px;
+      color: #333;
+      font-weight: 600;
+    }
+    .api-box pre {
+      margin-top: 10px;
+      background: #fff;
+      border: 1px solid #e0d5a0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #555;
+      overflow-x: auto;
+    }
+
+    /* Code */
+    code {
+      background: #f3f3f3;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #c0392b;
+    }
+    pre.code-block {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 11.5px;
+      line-height: 1.6;
+      overflow-x: auto;
+      margin: 10px 0 16px;
+    }
+    pre.code-block .kw  { color: #569cd6; }
+    pre.code-block .fn  { color: #dcdcaa; }
+    pre.code-block .str { color: #ce9178; }
+    pre.code-block .cm  { color: #6a9955; }
+
+    /* Files Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 12px;
+    }
+    th {
+      background: #D4AF37;
+      color: #fff;
+      text-align: left;
+      padding: 9px 14px;
+      font-weight: 700;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #fdfaf2; }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .tag-new  { background: #e8f5e9; color: #2e7d32; }
+    .tag-edit { background: #e3f2fd; color: #1565c0; }
+
+    /* Steps */
+    .steps { counter-reset: step; margin: 10px 0; }
+    .step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 18px;
+      align-items: flex-start;
+    }
+    .step-num {
+      counter-increment: step;
+      min-width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #D4AF37;
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-body { flex: 1; padding-top: 4px; }
+    .step-body strong { display: block; font-size: 13px; margin-bottom: 4px; }
+
+    /* Flow Diagram */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .flow-box {
+      background: #1a1a1a;
+      color: #D4AF37;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .flow-box.light {
+      background: #f9f6ee;
+      color: #333;
+      border: 1px solid #D4AF37;
+    }
+    .flow-arrow {
+      font-size: 18px;
+      color: #D4AF37;
+      padding: 0 8px;
+      font-weight: 700;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 2px solid #f0e8c8;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #999;
+    }
+
+    /* Print */
+    @media print {
+      body { padding: 20px; }
+      h2 { page-break-before: auto; }
+      .api-box, .step, table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Cover -->
+  <div class="cover">
+    <div class="badge">Technical Documentation</div>
+    <h1>OneHub <span>API Integration</span> Summary</h1>
+    <p>Platforms &amp; Categories — Dynamic Data from REST API</p>
+    <div class="meta">
+      <div><strong>Project:</strong> onehubweb</div>
+      <div><strong>Date:</strong> March 2026</div>
+      <div><strong>Stack:</strong> React + TypeScript + Vite</div>
+    </div>
+  </div>
+
+  <!-- Overview -->
+  <h2>1. Overview</h2>
+  <p>
+    Previously, platform names (Instagram, TikTok, YouTube) and category names were
+    <strong>hardcoded</strong> as static arrays in multiple component files. Any change
+    to the platform/category list required a code deployment.
+  </p>
+  <p>
+    This integration replaces all hardcoded data with <strong>live API calls</strong>,
+    so the UI reflects whatever is in the database — instantly, with zero code changes needed.
+  </p>
+
+  <div class="flow">
+    <div class="flow-box">Backend DB</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">REST API</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box light">usePlatforms()<br>useCategories()</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box light">UI Components</div>
+  </div>
+
+  <!-- APIs Used -->
+  <h2>2. APIs Used</h2>
+
+  <div class="api-box">
+    <span class="method">GET</span>
+    <span class="url">http://187.124.147.79:4000/api/platform/get-all-platforms</span>
+    <pre>{
+  "success": true,
+  "data": [
+    { "id": 1, "name": "Instagram", "icon": null, "is_active": 1 },
+    { "id": 2, "name": "YouTube",   "icon": null, "is_active": 1 },
+    { "id": 3, "name": "TikTok",    "icon": null, "is_active": 1 }
+  ]
+}</pre>
+  </div>
+
+  <div class="api-box">
+    <span class="method">GET</span>
+    <span class="url">http://187.124.147.79:4000/api/categories/get-all-categories</span>
+    <pre>{
+  "success": true,
+  "data": [
+    { "id": 1,  "name": "Fashion",           "slug": "fashion",           "image": "https://..." },
+    { "id": 2,  "name": "Travel",             "slug": "travel",             "image": "https://..." },
+    { "id": 5,  "name": "Lifestyle",          "slug": "lifestyle",          "image": "https://..." },
+    { "id": 10, "name": "Art & Photography",  "slug": "art-photography",    "image": null         },
+    ...22 categories total
+  ]
+}</pre>
+  </div>
+
+  <!-- Hooks Created -->
+  <h2>3. Hooks Created</h2>
+  <p>Two reusable React hooks were created in <code>src/app/hooks/</code>. Each hook fetches its endpoint once on mount, stores the result in state, and returns it to any component that calls it.</p>
+
+  <h3>usePlatforms.ts</h3>
+<pre class="code-block"><span class="kw">export function</span> <span class="fn">usePlatforms</span>() {
+  <span class="kw">const</span> [platforms, setPlatforms] = useState&lt;Platform[]&gt;([]);
+
+  useEffect(() =&gt; {
+    fetch(<span class="str">'http://...api.../get-all-platforms'</span>)
+      .then(res =&gt; res.json())
+      .then(data =&gt; {
+        <span class="kw">if</span> (data.success)
+          setPlatforms(data.data.filter(p =&gt; p.is_active === 1));
+      });
+  }, []); <span class="cm">// [] = run only once when component mounts</span>
+
+  <span class="kw">return</span> { platforms };
+}</pre>
+
+  <h3>useCategories.ts</h3>
+<pre class="code-block"><span class="kw">export function</span> <span class="fn">useCategories</span>() {
+  <span class="kw">const</span> [categories, setCategories] = useState&lt;Category[]&gt;([]);
+
+  useEffect(() =&gt; {
+    fetch(<span class="str">'http://...api.../get-all-categories'</span>)
+      .then(res =&gt; res.json())
+      .then(data =&gt; {
+        <span class="kw">if</span> (data.success) setCategories(data.data);
+      });
+  }, []);
+
+  <span class="kw">return</span> { categories };
+}</pre>
+
+  <!-- Files Changed -->
+  <h2>4. Files Changed</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Type</th>
+        <th>What Changed</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>src/app/hooks/usePlatforms.ts</code></td>
+        <td><span class="tag tag-new">NEW</span></td>
+        <td>Fetches active platforms from API</td>
+      </tr>
+      <tr>
+        <td><code>src/app/hooks/useCategories.ts</code></td>
+        <td><span class="tag tag-new">NEW</span></td>
+        <td>Fetches all categories from API</td>
+      </tr>
+      <tr>
+        <td><code>src/app/components/SearchBar.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>Platform dropdown + Category dropdown now from API (mobile &amp; desktop)</td>
+      </tr>
+      <tr>
+        <td><code>src/app/components/CategoryCarousel.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>Homepage category cards fetched from API (uses <code>category.image</code> with fallback)</td>
+      </tr>
+      <tr>
+        <td><code>src/app/pages/InfluencerListing.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>Sidebar platform filter + category filter checkboxes from API</td>
+      </tr>
+      <tr>
+        <td><code>src/app/pages/SignupInfluencer.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>Step 2 category grid + Step 3 social platform cards from API</td>
+      </tr>
+      <tr>
+        <td><code>src/app/pages/InfluencerSignup.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>Step 1 platform badge selection + category badge selection from API</td>
+      </tr>
+      <tr>
+        <td><code>src/app/pages/Registration.tsx</code></td>
+        <td><span class="tag tag-edit">EDITED</span></td>
+        <td>"Primary Platform" <code>&lt;select&gt;</code> options from API</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- How It Works -->
+  <h2>5. How It Works — Step by Step</h2>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Component mounts in the browser</strong>
+        React renders the component. The hook (<code>usePlatforms</code> or <code>useCategories</code>) is called automatically.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>useEffect fires once</strong>
+        The <code>fetch()</code> call is made to the API. While waiting, the array is empty <code>[]</code>.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>API responds with data</strong>
+        The response is parsed, filtered (e.g. only <code>is_active = 1</code> platforms), and saved via <code>setState</code>.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>React re-renders the component</strong>
+        The state now holds the API data. The <code>.map()</code> in the JSX renders a button/option for each item.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>UI is live and dynamic</strong>
+        Adding or removing a platform/category in the database now automatically appears in all dropdowns and forms — no code changes needed.
+      </div>
+    </div>
+  </div>
+
+  <!-- Before vs After -->
+  <h2>6. Before vs After</h2>
+
+  <h3>Before (Hardcoded)</h3>
+<pre class="code-block"><span class="cm">// Static array — requires code change to update</span>
+<span class="kw">const</span> platforms = [
+  <span class="str">'Instagram'</span>,
+  <span class="str">'TikTok'</span>,
+  <span class="str">'YouTube'</span>,
+  <span class="str">'Twitter'</span>,  <span class="cm">// removing this = code change + deployment</span>
+];</pre>
+
+  <h3>After (Dynamic)</h3>
+<pre class="code-block"><span class="cm">// Fetched from API — admin controls the list</span>
+<span class="kw">const</span> { platforms } = <span class="fn">usePlatforms</span>();
+
+{platforms.<span class="fn">map</span>((platform) =&gt; (
+  &lt;button <span class="kw">key</span>={platform.id} onClick={() =&gt; select(platform.name)}&gt;
+    {platform.name}
+  &lt;/button&gt;
+))}</pre>
+
+  <!-- Icon Fallback Strategy -->
+  <h2>7. Icon / Image Fallback Strategy</h2>
+  <p>
+    The API currently returns <code>"icon": null</code> for platforms and <code>"image": null</code>
+    for some categories. A local mapping handles known platforms, and a fallback is used for unknowns:
+  </p>
+
+<pre class="code-block"><span class="cm">// Local mapping for known platform icons</span>
+<span class="kw">const</span> platformMeta = {
+  Instagram: { icon: Instagram, color: <span class="str">'from-purple-600 to-pink-600'</span> },
+  YouTube:   { icon: Youtube,   color: <span class="str">'from-red-600 to-red-500'</span>   },
+  TikTok:    { icon: Video,     color: <span class="str">'from-black to-gray-800'</span>    },
+};
+
+<span class="cm">// Merge API data with local meta (fallback for unknown platforms)</span>
+<span class="kw">const</span> socialPlatforms = apiPlatforms.<span class="fn">map</span>((p) =&gt; ({
+  id:   p.name.toLowerCase(),
+  name: p.name,
+  ...(platformMeta[p.name] ?? { icon: Video, color: <span class="str">'from-gray-600 to-gray-500'</span> }),
+}));
+
+<span class="cm">// Category image fallback</span>
+&lt;img src={category.image ?? FALLBACK_IMAGE} /&gt;</pre>
+
+  <!-- Benefits -->
+  <h2>8. Benefits</h2>
+
+  <table>
+    <thead>
+      <tr><th>Before</th><th>After</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Adding a platform requires editing code</td>
+        <td>Admin adds it in the database — appears everywhere instantly</td>
+      </tr>
+      <tr>
+        <td>6 separate hardcoded arrays across files</td>
+        <td>2 hooks — single source of truth</td>
+      </tr>
+      <tr>
+        <td>Risk of inconsistency between pages</td>
+        <td>All pages always show the same data</td>
+      </tr>
+      <tr>
+        <td>Inactive platforms still showed in UI</td>
+        <td>Only <code>is_active = 1</code> platforms are shown</td>
+      </tr>
+      <tr>
+        <td>Deployment needed for any list change</td>
+        <td>No deployment needed — API controls the data</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>OneHub UAE — Confidential</span>
+    <span>Generated: March 2026</span>
+    <span>onehubweb v0.0.1</span>
+  </div>
+
+</body>
+</html>

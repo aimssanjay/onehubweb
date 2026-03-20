@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { usePlatforms } from '../hooks/usePlatforms';
 import { useNavigate } from 'react-router';
 import { Search, SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp } from 'lucide-react';
 import { Card } from '../components/ui/card';
@@ -10,11 +11,14 @@ import { Slider } from '../components/ui/slider';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { UnifiedInfluencerCard } from '../components/UnifiedInfluencerCard';
-import { influencers, categories } from '../../data/mockData';
+import { influencers } from '../../data/mockData';
+import { useCategories } from '../hooks/useCategories';
 
 export function InfluencerListing() {
   const navigate = useNavigate();
-  
+  const { platforms: apiPlatforms } = usePlatforms();
+  const { categories } = useCategories();
+
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState('recommended');
@@ -59,12 +63,10 @@ export function InfluencerListing() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const platforms = [
-    { id: 'instagram', label: 'Instagram' },
-    { id: 'tiktok', label: 'TikTok' },
-    { id: 'youtube', label: 'YouTube' },
-    { id: 'twitter', label: 'Twitter' },
-  ];
+  const platforms = apiPlatforms.map((p) => ({
+    id: p.name.toLowerCase(),
+    label: p.name,
+  }));
 
   const badges = [
     { id: 'top', label: 'Top Creator' },
@@ -254,7 +256,6 @@ export function InfluencerListing() {
                 className="ml-3 text-sm cursor-pointer flex-1 text-foreground"
               >
                 {category.name}
-                <span className="text-muted-foreground ml-1">({category.count})</span>
               </label>
             </div>
           ))}

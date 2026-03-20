@@ -4,9 +4,11 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import { usePlatforms } from '../hooks/usePlatforms';
 
 export default function Registration() {
   const navigate = useNavigate();
+  const { platforms } = usePlatforms();
 
   const [expandedSections, setExpandedSections] = useState({
     basic: true,
@@ -207,11 +209,9 @@ export default function Registration() {
                     className="w-full h-10 px-3 bg-black border border-gray-700 rounded-md text-white"
                   >
                     <option value="">Select platform</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="tiktok">TikTok</option>
-                    <option value="twitter">Twitter/X</option>
-                    <option value="linkedin">LinkedIn</option>
+                    {platforms.map((p) => (
+                      <option key={p.id} value={p.name.toLowerCase()}>{p.name}</option>
+                    ))}
                   </select>
                 </div>
 

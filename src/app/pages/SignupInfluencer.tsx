@@ -5,51 +5,26 @@ import { Input } from '@/app/components/ui/input';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Instagram, Youtube, Video, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { usePlatforms } from '../hooks/usePlatforms';
+import { useCategories } from '../hooks/useCategories';
 
-const categories = [
-  { id: 'fashion', name: 'Fashion & Beauty', icon: '👗' },
-  { id: 'fitness', name: 'Fitness & Health', icon: '💪' },
-  { id: 'food', name: 'Food & Cooking', icon: '🍳' },
-  { id: 'travel', name: 'Travel & Lifestyle', icon: '✈️' },
-  { id: 'tech', name: 'Tech & Gaming', icon: '🎮' },
-  { id: 'business', name: 'Business & Finance', icon: '💼' },
-  { id: 'parenting', name: 'Parenting & Family', icon: '👶' },
-  { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
-];
 
-const socialPlatforms = [
-  { 
-    id: 'instagram', 
-    name: 'Instagram', 
-    icon: Instagram, 
-    placeholder: '@username',
-    color: 'from-purple-600 to-pink-600'
-  },
-  { 
-    id: 'youtube', 
-    name: 'YouTube', 
-    icon: Youtube, 
-    placeholder: 'Channel URL',
-    color: 'from-red-600 to-red-500'
-  },
-  { 
-    id: 'tiktok', 
-    name: 'TikTok', 
-    icon: Video, 
-    placeholder: '@username',
-    color: 'from-black to-gray-800'
-  },
-  { 
-    id: 'ugc', 
-    name: 'UGC / Other', 
-    icon: Video, 
-    placeholder: 'Portfolio URL or description',
-    color: 'from-primary to-secondary'
-  },
-];
+const platformMeta: Record<string, { icon: React.ComponentType<any>; placeholder: string; color: string }> = {
+  Instagram: { icon: Instagram, placeholder: '@username', color: 'from-purple-600 to-pink-600' },
+  YouTube: { icon: Youtube, placeholder: 'Channel URL', color: 'from-red-600 to-red-500' },
+  TikTok: { icon: Video, placeholder: '@username', color: 'from-black to-gray-800' },
+};
 
 export default function SignupInfluencer() {
   const navigate = useNavigate();
+  const { platforms: apiPlatforms } = usePlatforms();
+  const { categories: apiCategories } = useCategories();
+  const categories = apiCategories.map((c) => ({ id: c.slug, name: c.name, icon: '🏷️' }));
+  const socialPlatforms = apiPlatforms.map((p) => ({
+    id: p.name.toLowerCase(),
+    name: p.name,
+    ...(platformMeta[p.name] ?? { icon: Video, placeholder: 'Username or URL', color: 'from-gray-600 to-gray-500' }),
+  }));
   const [step, setStep] = useState(1);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [socialAccounts, setSocialAccounts] = useState<Record<string, string>>({});

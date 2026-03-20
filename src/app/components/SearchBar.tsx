@@ -3,6 +3,9 @@ import { useState, useRef, useEffect } from 'react';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
+import { usePlatforms } from '../hooks/usePlatforms';
+import { useCategories } from '../hooks/useCategories';
+
 
 interface SearchBarProps {
   onSearch?: (platforms: string[], categories: string[]) => void;
@@ -10,107 +13,9 @@ interface SearchBarProps {
   onCategoryChange?: (values: string[]) => void;
 }
 
-const platforms = [
-  'Instagram',
-  'TikTok',
-  'User Generated Content',
-  'YouTube',
-  'Twitter',
-  'Twitch',
-];
-
-const categoryData = [
-  { 
-    name: 'Lifestyle', 
-    image: 'https://images.unsplash.com/photo-1613053342567-924891457d16?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsaWZlc3R5bGUlMjBpbmZsdWVuY2VyJTIwY2FzdWFsfGVufDF8fHx8MTc3MzgxNDA5NHww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Beauty', 
-    image: 'https://images.unsplash.com/photo-1605474082506-21d31d9d95e8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiZWF1dHklMjBtYWtldXAlMjBwb3J0cmFpdHxlbnwxfHx8fDE3NzM3NzU3MDJ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Fashion', 
-    image: 'https://images.unsplash.com/photo-1762430815620-fcca603c240c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmYXNoaW9uJTIwbW9kZWwlMjBydW53YXl8ZW58MXx8fHwxNzczODE0MDk1fDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Travel', 
-    image: 'https://images.unsplash.com/photo-1619467416348-6a782839e95f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmF2ZWwlMjBhZHZlbnR1cmUlMjB3b3JsZHxlbnwxfHx8fDE3NzM3OTM4NDZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Health & Fitness', 
-    image: 'https://images.unsplash.com/photo-1584827386916-b5351d3ba34b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmaXRuZXNzJTIwd29ya291dCUyMGd5bXxlbnwxfHx8fDE3NzM3NDI4OTJ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Food & Drink', 
-    image: 'https://images.unsplash.com/photo-1676272650338-faaea8e5e5fd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmb29kJTIwY29va2luZyUyMGN1bGluYXJ5fGVufDF8fHx8MTc3MzgxNDA5N3ww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Family & Children', 
-    image: 'https://images.unsplash.com/photo-1771924488441-fcd9bb0f3ff5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmYW1pbHklMjBjaGlsZHJlbiUyMHBhcmVudGluZ3xlbnwxfHx8fDE3NzM4MTQwOTd8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Comedy & Entertainment', 
-    image: 'https://images.unsplash.com/photo-1770413186279-cddf39ca13c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb21lZHklMjBlbnRlcnRhaW5tZW50JTIwcGVyZm9ybWVyfGVufDF8fHx8MTc3MzgxNDA5N3ww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Art & Photography', 
-    image: 'https://images.unsplash.com/photo-1584534570458-15eda6d0330c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhcnQlMjBwaG90b2dyYXBoeSUyMGNyZWF0aXZlfGVufDF8fHx8MTc3MzgxNDA5N3ww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Music & Dance', 
-    image: 'https://images.unsplash.com/photo-1766368490994-dcb0decd4d3a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtdXNpYyUyMGRhbmNlJTIwcGVyZm9ybWFuY2V8ZW58MXx8fHwxNzczODE0MDk3fDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Model', 
-    image: 'https://images.unsplash.com/photo-1676810052606-a1664d2d5dfb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2RlbCUyMHByb2Zlc3Npb25hbCUyMHBob3Rvc2hvb3R8ZW58MXx8fHwxNzczODE0MDk4fDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Animals & Pets', 
-    image: 'https://images.unsplash.com/photo-1712316146767-610c37aa62a2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhbmltYWxzJTIwcGV0cyUyMGN1dGV8ZW58MXx8fHwxNzczODE0MDk4fDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Adventure & Outdoors', 
-    image: 'https://images.unsplash.com/photo-1603199940387-cf2c8368d84a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhZHZlbnR1cmUlMjBvdXRkb29ycyUyMGhpa2luZ3xlbnwxfHx8fDE3NzM4MTQwOTh8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Entrepreneur & Business', 
-    image: 'https://images.unsplash.com/photo-1542558891698-6a3a72d5859a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMGVudHJlcHJlbmV1ciUyMHByb2Zlc3Npb25hbHxlbnwxfHx8fDE3NzM3OTY2OTN8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Education', 
-    image: 'https://images.unsplash.com/photo-1721468184185-214871ec4411?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxlZHVjYXRpb24lMjBsZWFybmluZyUyMHN0dWRlbnR8ZW58MXx8fHwxNzczNzE3Nzg0fDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Athlete & Sports', 
-    image: 'https://images.unsplash.com/photo-1667791275929-5701d83734c1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhdGhsZXRlJTIwc3BvcnRzJTIwZml0bmVzc3xlbnwxfHx8fDE3NzM4MTQxMDB8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Gaming', 
-    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBlc3BvcnRzJTIwZ2FtZXJ8ZW58MXx8fHwxNzczODE0MTAwfDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Technology', 
-    image: 'https://images.unsplash.com/photo-1614081989290-bcdba07cd9d3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0ZWNobm9sb2d5JTIwdGVjaCUyMGRpZ2l0YWx8ZW58MXx8fHwxNzczODE0MTAwfDA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'LGBTQ2+', 
-    image: 'https://images.unsplash.com/photo-1686059794038-b9bfa83d5680?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsZ2J0cSUyMHByaWRlJTIwZGl2ZXJzaXR5fGVufDF8fHx8MTc3MzgxNDEwMXww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Healthcare', 
-    image: 'https://images.unsplash.com/photo-1708596082136-9bbf99609df7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxoZWFsdGhjYXJlJTIwbWVkaWNhbCUyMHdlbGxuZXNzfGVufDF8fHx8MTc3MzgxNDEwMXww&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Actor', 
-    image: 'https://images.unsplash.com/photo-1764763181076-62d433e72aa6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhY3RvciUyMHRoZWF0ZXIlMjBwZXJmb3JtYW5jZXxlbnwxfHx8fDE3NzM4MTQxMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-  { 
-    name: 'Automotive', 
-    image: 'https://images.unsplash.com/photo-1668764340764-89ec96bc2a3f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhdXRvbW90aXZlJTIwY2FyJTIwdmVoaWNsZXxlbnwxfHx8fDE3NzM4MTQxMDF8MA&ixlib=rb-4.1.0&q=80&w=1080'
-  },
-];
-
 export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: SearchBarProps) {
+  const { platforms } = usePlatforms();
+  const { categories: categoryData } = useCategories();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
@@ -247,16 +152,16 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
             >
               {platforms.map((platform) => (
                 <button
-                  key={platform}
-                  onClick={() => handlePlatformToggle(platform)}
+                  key={platform.id}
+                  onClick={() => handlePlatformToggle(platform.name)}
                   className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors flex items-center justify-between"
-                  style={{ 
-                    color: selectedPlatforms.includes(platform) ? '#D4AF37' : '#1a1a1a',
-                    backgroundColor: selectedPlatforms.includes(platform) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
+                  style={{
+                    color: selectedPlatforms.includes(platform.name) ? '#D4AF37' : '#1a1a1a',
+                    backgroundColor: selectedPlatforms.includes(platform.name) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
                   }}
                 >
-                  <span>{platform}</span>
-                  {selectedPlatforms.includes(platform) && (
+                  <span>{platform.name}</span>
+                  {selectedPlatforms.includes(platform.name) && (
                     <Check className="w-4 h-4" style={{ color: '#D4AF37' }} />
                   )}
                 </button>
@@ -332,7 +237,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
               <div className="flex flex-wrap gap-2">
                 {categoryData.map((category) => (
                   <button
-                    key={category.name}
+                    key={category.id}
                     onClick={() => handleCategoryToggle(category.name)}
                     className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)]"
                     style={{
@@ -438,16 +343,16 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
             >
               {platforms.map((platform) => (
                 <button
-                  key={platform}
-                  onClick={() => handlePlatformToggle(platform)}
+                  key={platform.id}
+                  onClick={() => handlePlatformToggle(platform.name)}
                   className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors"
-                  style={{ 
-                    color: selectedPlatforms.includes(platform) ? '#D4AF37' : '#1a1a1a',
-                    backgroundColor: selectedPlatforms.includes(platform) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
+                  style={{
+                    color: selectedPlatforms.includes(platform.name) ? '#D4AF37' : '#1a1a1a',
+                    backgroundColor: selectedPlatforms.includes(platform.name) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
                   }}
                 >
-                  {platform}
-                  {selectedPlatforms.includes(platform) && <Check className="w-4 h-4 ml-2" />}
+                  {platform.name}
+                  {selectedPlatforms.includes(platform.name) && <Check className="w-4 h-4 ml-2" />}
                 </button>
               ))}
             </div>
@@ -531,7 +436,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
               <div className="flex flex-wrap gap-2">
                 {categoryData.map((category) => (
                   <button
-                    key={category.name}
+                    key={category.id}
                     onClick={() => handleCategoryToggle(category.name)}
                     className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)]"
                     style={{

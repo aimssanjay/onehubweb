@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { usePlatforms } from '../hooks/usePlatforms';
+import { useCategories } from '../hooks/useCategories';
 import { User, Mail, Lock, Instagram, Youtube, DollarSign, Upload, Check, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,40 +22,21 @@ interface InfluencerSignupProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-const platformOptions = [
-  { id: 'instagram', name: 'Instagram', icon: Instagram },
-  { id: 'youtube', name: 'YouTube', icon: Youtube },
-  { id: 'tiktok', name: 'TikTok' },
-  { id: 'twitter', name: 'Twitter' },
-  { id: 'facebook', name: 'Facebook' },
-];
+const platformIconMap: Record<string, React.ComponentType<any>> = {
+  Instagram,
+  YouTube: Youtube,
+};
 
-const categoryOptions = [
-  'Lifestyle',
-  'Beauty',
-  'Fashion',
-  'Travel',
-  'Health & Fitness',
-  'Food & Drink',
-  'Family & Children',
-  'Comedy & Entertainment',
-  'Art & Photography',
-  'Music & Dance',
-  'Model',
-  'Animals & Pets',
-  'Adventure & Outdoors',
-  'Entrepreneur & Business',
-  'Education',
-  'Athlete & Sports',
-  'Gaming',
-  'Technology',
-  'LGBTQ2+',
-  'Healthcare',
-  'Actor',
-  'Automotive',
-];
 
 export function InfluencerSignup({ onNavigate }: InfluencerSignupProps) {
+  const { platforms: apiPlatforms } = usePlatforms();
+  const { categories: apiCategories } = useCategories();
+  const categoryOptions = apiCategories.map((c) => c.name);
+  const platformOptions = apiPlatforms.map((p) => ({
+    id: p.name.toLowerCase(),
+    name: p.name,
+    icon: platformIconMap[p.name],
+  }));
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 5;
   const [formData, setFormData] = useState({
