@@ -56,11 +56,33 @@ export default function Registration() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Form submitted:', formData);
-    // Handle form submission
-  };
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  try {
+    const response = await fetch("http://187.124.147.79:4000/api/users/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(formData),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert("Registration Successful ✅");
+      console.log(data);
+    } else {
+      alert("Something went wrong ❌");
+      console.log(data);
+    }
+
+  } catch (error) {
+    console.log("Error:", error);
+    alert("Server error ❌");
+  }
+};
 
   return (
     <div className="min-h-screen bg-black py-12 px-4">

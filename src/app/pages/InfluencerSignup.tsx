@@ -1,521 +1,378 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Checkbox } from '@/app/components/ui/checkbox';
+import { Instagram, Youtube, Video, Check, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Logo } from '../components/Logo';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
-import { User, Mail, Lock, Instagram, Youtube, DollarSign, Upload, Check, Sparkles } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card } from '../components/ui/card';
-import { Progress } from '../components/ui/progress';
-import { Textarea } from '../components/ui/textarea';
-import { Badge } from '../components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import { categories } from '../../data/mockData';
+import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
 
-interface InfluencerSignupProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-const platformIconMap: Record<string, React.ComponentType<any>> = {
-  Instagram,
-  YouTube: Youtube,
+const platformMeta: Record<string, { icon: React.ComponentType<any>; placeholder: string; color: string }> = {
+  Instagram: { icon: Instagram, placeholder: 'https://instagram.com/yourusername', color: 'from-purple-600 to-pink-600' },
+  YouTube: { icon: Youtube, placeholder: 'https://youtube.com/channel/yourchannelname', color: 'from-red-600 to-red-500' },
+  TikTok: { icon: Video, placeholder: 'https://tiktok.com/@yourusername', color: 'from-black to-gray-800' },
 };
 
-
-export function InfluencerSignup({ onNavigate }: InfluencerSignupProps) {
+export function InfluencerSignup() {
+  const navigate = useNavigate();
   const { platforms: apiPlatforms } = usePlatforms();
   const { categories: apiCategories } = useCategories();
-  const categoryOptions = apiCategories.map((c) => c.name);
-  const platformOptions = apiPlatforms.map((p) => ({
+
+  const categories = apiCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: '🏷️',
+  }));
+
+  const socialPlatforms = apiPlatforms.map((p) => ({
     id: p.name.toLowerCase(),
     name: p.name,
-    icon: platformIconMap[p.name],
+    ...(platformMeta[p.name] ?? { icon: Video, placeholder: 'https://example.com/yourprofile', color: 'from-gray-600 to-gray-500' }),
   }));
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 5;
+
+  const [step, setStep] = useState(1);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [socialAccounts, setSocialAccounts] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    // Step 1: Personal Info
-    name: '',
+    fullName: '',
     email: '',
     password: '',
-    categories: [] as string[],
-    platforms: [] as string[],
-    location: '',
-    bio: '',
-    // Step 2: Social Accounts
-    instagram: '',
-    youtube: '',
-    tiktok: '',
-    // Step 3: Packages
-    package1Price: '',
-    package2Price: '',
-    package3Price: '',
-    // Step 4: Portfolio (mock)
-    portfolioUploaded: false,
+    confirmPassword: '',
   });
 
-  const progress = (currentStep / totalSteps) * 100;
-
-  const togglePlatform = (platform: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      platforms: prev.platforms.includes(platform)
-        ? prev.platforms.filter((p) => p !== platform)
-        : [...prev.platforms, platform],
-    }));
+  const toggleCategory = (categoryId: number) => {
+    setSelectedCategories(prev =>
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
   };
 
-  const toggleCategory = (category: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      categories: prev.categories.includes(category)
-        ? prev.categories.filter((c) => c !== category)
-        : [...prev.categories, category],
-    }));
+  const handleSocialAccountChange = (platformId: string, value: string) => {
+    setSocialAccounts(prev => ({ ...prev, [platformId]: value }));
   };
 
-  const handleNext = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+   // ── STEP 1: Register and save token ──
+  const handleRegister = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REGISTER}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          user_type_id: 3,
+        }),
+      });
+      const data = await response.json();
+      console.log('Register Response:', data);
+      if (response.ok) {
+        const token = data.token || data.access_token || data.data?.token || data.data?.access_token;
+        if (!token) {
+          alert('Registration succeeded but no token found. Check console.');
+          return;
+        }
+        localStorage.setItem('influencer_token', token);
+        setAuthToken(token);
+        setStep(2);
+      } else {
+        alert(data.message || 'Signup failed');
+      }
+    } catch (error) {
+      console.error('Register Error:', error);
+      alert('Server error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+ // ── STEP 2: Save categories with token ──
+  const handleSaveCategories = async () => {
+    if (!authToken) {
+      alert('Session expired. Please restart signup.');
+      setStep(1);
+      return;
+    }
+    console.log('Category IDs being sent:', selectedCategories);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/influencers/update-categories`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ category_ids: selectedCategories }),
+      });
+      const data = await response.json();
+      console.log('Categories Response:', data);
+      if (response.ok) {
+        setStep(3);
+      } else {
+        alert(data.message || 'Failed to save categories');
+      }
+    } catch (error) {
+      console.error('Categories Error:', error);
+      alert('Server error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSubmit = () => {
-    // Mock submission - navigate to influencer dashboard
-    onNavigate('dashboard-influencer');
+  // ── STEP 3: Save social accounts with token ──
+  const handleSubmit = async () => {
+    console.log('Token at submit:', authToken);
+    console.log('Social accounts:', socialAccounts);
+
+    if (!authToken) {
+      alert('Session expired. Please restart signup.');
+      setStep(1);
+      return;
+    }
+
+    const accountsArray = Object.entries(socialAccounts)
+      .filter(([_, url]) => url.trim() !== '')
+      .map(([platformId, url]) => {
+        const platform = apiPlatforms.find(
+          p => p.name.toLowerCase() === platformId.toLowerCase()
+        );
+        console.log(`platformId: ${platformId}, matched:`, platform);
+        return {
+          platform_id: platform?.id,
+          profile_url: url,
+          username: url,
+        };
+      })
+      .filter(item => item.platform_id);
+
+    console.log('Final accountsArray:', accountsArray);
+
+    if (accountsArray.length === 0) {
+      alert('Please add at least one social account');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/influencers/add-social-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ accounts: accountsArray }),
+      });
+      const data = await response.json();
+      console.log('Socials Response:', data);
+      if (response.ok) {
+        navigate('/influencer/dashboard');
+      } else {
+        alert(data.message || 'Failed to save social accounts');
+      }
+    } catch (error) {
+      console.error('Socials Error:', error);
+      alert('Server error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-semibold">InfluenceHub</span>
-          </div>
-          <h1 className="text-3xl font-bold mb-2">Join as a Creator</h1>
-          <p className="text-muted-foreground">
-            Complete your profile to start receiving brand collaborations
-          </p>
-        </div>
+    <div className="min-h-screen bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 
-        {/* Progress Bar */}
+        {/* Progress Indicator */}
         <div className="mb-8">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <span className="text-sm text-muted-foreground">{Math.round(progress)}% complete</span>
+          <div className="flex items-center justify-center gap-4">
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 1 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
+              {step > 1 ? <Check className="w-5 h-5" /> : '1'}
+            </div>
+            <div className={`h-1 w-20 ${step >= 2 ? 'bg-primary' : 'bg-gray-200'}`} />
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 2 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
+              {step > 2 ? <Check className="w-5 h-5" /> : '2'}
+            </div>
+            <div className={`h-1 w-20 ${step >= 3 ? 'bg-primary' : 'bg-gray-200'}`} />
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 3 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
+              3
+            </div>
           </div>
-          <Progress value={progress} className="h-2" />
+          <div className="flex justify-between mt-2 text-sm text-gray-600">
+            <span className="w-24 text-center">Account</span>
+            <span className="w-24 text-center">Categories</span>
+            <span className="w-24 text-center">Connect</span>
+          </div>
         </div>
 
-        <Card className="p-8">
-          {/* Step 1: Personal Info */}
-          {currentStep === 1 && (
+        {/* ── STEP 1 ── */}
+        {step === 1 && (
+          <div className="bg-black rounded-2xl p-8 border border-gray-800">
+            <h1 className="text-3xl font-bold text-white mb-2">Create Your Influencer Account</h1>
+            <p className="text-gray-400 mb-8">Join thousands of creators earning with brands</p>
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2">Personal Information</h2>
-                <p className="text-muted-foreground">Tell us about yourself</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    placeholder="Sarah Johnson"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              {/* Platform Selection */}
-              <div className="space-y-2">
-                <Label>Platforms</Label>
-                <p className="text-sm text-muted-foreground mb-3">Select all platforms where you're active</p>
-                <div className="flex flex-wrap gap-2">
-                  {platformOptions.map((platform) => (
-                    <Badge
-                      key={platform.id}
-                      variant={formData.platforms.includes(platform.id) ? 'default' : 'outline'}
-                      className={`cursor-pointer px-4 py-2 text-sm ${
-                        formData.platforms.includes(platform.id)
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : 'hover:bg-gray-100'
-                      }`}
-                      onClick={() => togglePlatform(platform.id)}
-                    >
-                      {platform.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category Selection */}
-              <div className="space-y-2">
-                <Label>Categories</Label>
-                <p className="text-sm text-muted-foreground mb-3">Select your content categories</p>
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Popular</p>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {categoryOptions.slice(0, 11).map((category) => (
-                      <Badge
-                        key={category}
-                        variant={formData.categories.includes(category) ? 'default' : 'outline'}
-                        className={`cursor-pointer px-3 py-1.5 text-sm ${
-                          formData.categories.includes(category)
-                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                            : 'hover:bg-gray-100'
-                        }`}
-                        onClick={() => toggleCategory(category)}
-                      >
-                        {category}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {categoryOptions.slice(11).map((category) => (
-                      <Badge
-                        key={category}
-                        variant={formData.categories.includes(category) ? 'default' : 'outline'}
-                        className={`cursor-pointer px-3 py-1.5 text-sm ${
-                          formData.categories.includes(category)
-                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                            : 'hover:bg-gray-100'
-                        }`}
-                        onClick={() => toggleCategory(category)}
-                      >
-                        {category}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+                <label className="block text-sm font-medium text-white mb-2">Full Name</label>
                 <Input
-                  id="location"
-                  placeholder="Los Angeles, CA"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  placeholder="Tell brands about yourself and what makes you unique..."
-                  value={formData.bio}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  rows={4}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
                 />
               </div>
-            </div>
-          )}
-
-          {/* Step 2: Social Accounts */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2">Connect Your Social Accounts</h2>
-                <p className="text-muted-foreground">Link at least one platform to continue</p>
+                <label className="block text-sm font-medium text-white mb-2">Password</label>
+                <Input
+                  type="password"
+                  placeholder="Create a strong password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
+                />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="instagram">Instagram Username</Label>
-                <div className="relative">
-                  <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-pink-600" />
-                  <Input
-                    id="instagram"
-                    placeholder="@yourusername"
-                    value={formData.instagram}
-                    onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">We'll verify your account and follower count</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="youtube">YouTube Channel URL</Label>
-                <div className="relative">
-                  <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-red-600" />
-                  <Input
-                    id="youtube"
-                    placeholder="youtube.com/@yourchannel"
-                    value={formData.youtube}
-                    onChange={(e) => setFormData({ ...formData, youtube: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tiktok">TikTok Username</Label>
-                <div className="relative">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
-                  </svg>
-                  <Input
-                    id="tiktok"
-                    placeholder="@yourusername"
-                    value={formData.tiktok}
-                    onChange={(e) => setFormData({ ...formData, tiktok: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Packages & Pricing */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2">Set Your Packages</h2>
-                <p className="text-muted-foreground">
-                  Create packages that brands can purchase (you can edit these later)
-                </p>
+                <label className="block text-sm font-medium text-white mb-2">Confirm Password</label>
+                <Input
+                  type="password"
+                  placeholder="Re-enter your password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
+                />
               </div>
-
-              <Card className="p-6 bg-gray-50">
-                <h3 className="font-semibold mb-4">Basic Package</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="package1">Starting Price (USD)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="package1"
-                      type="number"
-                      placeholder="500"
-                      value={formData.package1Price}
-                      onChange={(e) => setFormData({ ...formData, package1Price: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Example: Single Instagram post or story set
-                  </p>
-                </div>
-              </Card>
-
-              <Card className="p-6 bg-gray-50">
-                <h3 className="font-semibold mb-4">Standard Package</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="package2">Price (USD)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="package2"
-                      type="number"
-                      placeholder="1000"
-                      value={formData.package2Price}
-                      onChange={(e) => setFormData({ ...formData, package2Price: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Example: Video content or multiple posts
-                  </p>
-                </div>
-              </Card>
-
-              <Card className="p-6 bg-gray-50">
-                <h3 className="font-semibold mb-4">Premium Package</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="package3">Price (USD)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="package3"
-                      type="number"
-                      placeholder="2000"
-                      value={formData.package3Price}
-                      onChange={(e) => setFormData({ ...formData, package3Price: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Example: Full campaign with multiple deliverables
-                  </p>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* Step 4: Portfolio Upload */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Upload Your Portfolio</h2>
-                <p className="text-muted-foreground">
-                  Showcase your best work to attract brands
-                </p>
-              </div>
-
-              <div className="border-2 border-dashed rounded-lg p-12 text-center hover:border-primary transition-colors cursor-pointer">
-                <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">Click to upload or drag and drop</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  PNG, JPG, or MP4 up to 10MB each
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => setFormData({ ...formData, portfolioUploaded: true })}
-                >
-                  Select Files
-                </Button>
-              </div>
-
-              {formData.portfolioUploaded && (
-                <Card className="p-4 bg-green-50 border-green-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                      <Check className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-green-900">Files uploaded successfully</p>
-                      <p className="text-sm text-green-700">4 portfolio items added</p>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Step 5: Review & Submit */}
-          {currentStep === 5 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Review Your Profile</h2>
-                <p className="text-muted-foreground">
-                  Almost done! Review your information before submitting
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <Card className="p-4">
-                  <h3 className="font-semibold mb-2">Personal Information</h3>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Name: {formData.name || 'Not provided'}</p>
-                    <p>Email: {formData.email || 'Not provided'}</p>
-                    <p>Platforms: {formData.platforms.length > 0 ? formData.platforms.join(', ') : 'Not provided'}</p>
-                    <p>Categories: {formData.categories.length > 0 ? formData.categories.join(', ') : 'Not provided'}</p>
-                    <p>Location: {formData.location || 'Not provided'}</p>
-                  </div>
-                </Card>
-
-                <Card className="p-4">
-                  <h3 className="font-semibold mb-2">Social Accounts</h3>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    {formData.instagram && <p>Instagram: {formData.instagram}</p>}
-                    {formData.youtube && <p>YouTube: {formData.youtube}</p>}
-                    {formData.tiktok && <p>TikTok: {formData.tiktok}</p>}
-                    {!formData.instagram && !formData.youtube && !formData.tiktok && <p>No accounts connected</p>}
-                  </div>
-                </Card>
-
-                <Card className="p-4">
-                  <h3 className="font-semibold mb-2">Packages</h3>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    {formData.package1Price && <p>Basic: ${formData.package1Price}</p>}
-                    {formData.package2Price && <p>Standard: ${formData.package2Price}</p>}
-                    {formData.package3Price && <p>Premium: ${formData.package3Price}</p>}
-                    {!formData.package1Price && !formData.package2Price && !formData.package3Price && <p>No packages set</p>}
-                  </div>
-                </Card>
-
-                <Card className="p-4 bg-blue-50 border-blue-200">
-                  <p className="text-sm text-blue-900">
-                    <strong>Note:</strong> Your profile will be reviewed by our team within 24-48 hours. You'll receive an email once it's approved.
-                  </p>
-                </Card>
-              </div>
-            </div>
-          )}
-
-          {/* Navigation Buttons */}
-          <div className="flex gap-3 mt-8 pt-6 border-t">
-            {currentStep > 1 && (
-              <Button variant="outline" onClick={handleBack} className="flex-1">
-                Back
-              </Button>
-            )}
-            {currentStep < totalSteps ? (
-              <Button onClick={handleNext} className="flex-1">
-                Continue
-              </Button>
-            ) : (
-              <Button onClick={handleSubmit} className="flex-1">
-                Submit Application
-              </Button>
-            )}
-          </div>
-
-          {/* Login Link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <button
-                onClick={() => onNavigate('login')}
-                className="text-primary hover:underline font-semibold"
+              <Button
+                onClick={handleRegister}
+                disabled={loading || !formData.fullName || !formData.email || !formData.password || formData.password !== formData.confirmPassword}
+                className="w-full bg-primary hover:bg-secondary text-white gap-2"
               >
-                Log in
-              </button>
+                {loading ? 'Creating Account...' : 'Continue'}
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <p className="text-center text-sm text-gray-400">
+                Already have an account?{' '}
+                <a href="/influencer/login" className="text-primary hover:underline">Sign in</a>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2 ── */}
+        {step === 2 && (
+          <div className="bg-black rounded-2xl p-8 border border-gray-800">
+            <h1 className="text-3xl font-bold text-white mb-2">Select Your Primary Categories</h1>
+            <p className="text-gray-400 mb-8">Choose all categories that apply (select multiple)</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              {categories.map((category) => (
+                <div
+                  key={category.id}
+                  onClick={() => toggleCategory(category.id)}
+                  className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedCategories.includes(category.id)
+                      ? 'border-primary bg-primary/10'
+                      : 'border-gray-700 bg-gray-900 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-800 text-2xl">
+                    {category.icon}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-white">{category.name}</p>
+                  </div>
+                  <Checkbox
+                    checked={selectedCategories.includes(category.id)}
+                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <Button
+                onClick={() => setStep(1)}
+                variant="outline"
+                className="flex-1 bg-gray-800 border-2 border-gray-700 text-white hover:bg-gray-700 gap-2 font-semibold"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </Button>
+              <Button
+                onClick={handleSaveCategories}
+                disabled={loading || selectedCategories.length === 0}
+                className="flex-1 bg-primary hover:bg-secondary text-black gap-2 font-semibold"
+              >
+                {loading ? 'Saving...' : 'Continue'}
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3 ── */}
+        {step === 3 && (
+          <div className="bg-black rounded-2xl p-8 border border-gray-800">
+            <h1 className="text-3xl font-bold text-white mb-2">Connect Your Accounts</h1>
+            <p className="text-gray-400 mb-8">Link your social media profiles or add UGC portfolio</p>
+            <div className="space-y-4 mb-8">
+              {socialPlatforms.map((platform) => {
+                const Icon = platform.icon;
+                return (
+                  <div key={platform.id} className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className={`flex items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-br ${platform.color}`}>
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-white">{platform.name}</h3>
+                        <p className="text-sm text-gray-400">Add your profile URL</p>
+                      </div>
+                    </div>
+                    <Input
+                      type="url"
+                      placeholder={platform.placeholder}
+                      value={socialAccounts[platform.id] || ''}
+                      onChange={(e) => handleSocialAccountChange(platform.id, e.target.value)}
+                      className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-4">
+              <Button
+                onClick={() => setStep(2)}
+                variant="outline"
+                className="flex-1 bg-gray-800 border-2 border-gray-700 text-white hover:bg-gray-700 gap-2 font-semibold"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="flex-1 bg-primary hover:bg-secondary text-black gap-2 font-semibold"
+              >
+                {loading ? 'Completing...' : 'Complete Signup'}
+                <Check className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-4">
+              You can always add more platforms later in your dashboard
             </p>
           </div>
-        </Card>
+        )}
+
       </div>
     </div>
   );

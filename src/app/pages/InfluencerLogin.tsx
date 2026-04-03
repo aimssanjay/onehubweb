@@ -12,19 +12,49 @@ export default function InfluencerLogin() {
     password: '',
   });
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // For demo purposes, accept any login and redirect to dashboard
-    // In production, this would validate against backend
-    localStorage.setItem('influencer_user', JSON.stringify({
-      email: formData.email,
-      role: 'influencer',
-      fullName: 'Demo Influencer',
-    }));
-    
-    navigate('/influencer/dashboard');
-  };
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  try {
+    const response = await fetch("http://187.124.147.79:4000/api/users/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: formData.email.trim(),
+        password: formData.password.trim(),
+      }),
+    });
+
+    const data = await response.json();
+    console.log("Login Response:", data);
+
+    if (response.ok && data.success) {
+      const token =
+        data.token ||
+        data.access_token ||
+        data.data?.token ||
+        data.data?.access_token;
+
+      if (!token) {
+        alert("Login successful but token missing. Check console.");
+        return;
+      }
+
+      // ✅ Save with correct key names
+      localStorage.setItem("influencer_token", token);
+      localStorage.setItem("influencer_user", JSON.stringify(data.data));
+
+      navigate("/influencer/dashboard");
+      return;
+    }
+
+    alert(data?.message || "Invalid email or password");
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    alert("Network issue or server error");
+  }
+};
 
   return (
     <div className="min-h-screen bg-white">
@@ -87,16 +117,16 @@ export default function InfluencerLogin() {
               Sign In
             </Button>
 
-            <div className="relative my-6">
+           { /* <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700" />
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-2 bg-black text-gray-400">Or continue with</span>
               </div>
-            </div>
+            </div> */}
 
-            <div className="grid grid-cols-2 gap-4">
+           { /* <div className="grid grid-cols-2 gap-4">
               <Button
                 type="button"
                 variant="outline"
@@ -132,7 +162,7 @@ export default function InfluencerLogin() {
                 </svg>
                 GitHub
               </Button>
-            </div>
+            </div> */}
 
             <p className="text-center text-sm text-gray-400">
               Don't have an account?{' '}
