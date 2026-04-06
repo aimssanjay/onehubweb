@@ -15,7 +15,6 @@ import { Textarea } from '../components/ui/textarea';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
-import { campaigns } from '../../data/mockData';
 import { API_BASE_URL } from '../../services/api';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
@@ -30,6 +29,21 @@ const categoryList = [
   'Gaming', 'Technology', 'Athletes & Sports', 'Adventure & Outdoors',
   'Healthcare', 'Automotive', 'Skilled Trades', 'Cannabis'
 ];
+
+// ✅ Status mapping
+const STATUS_MAP: Record<number, string> = {
+  1: 'pending',
+  2: 'active',
+  3: 'completed',
+  4: 'cancelled',
+};
+
+const STATUS_ID_MAP: Record<string, number> = {
+  pending: 1,
+  active: 2,
+  completed: 3,
+  cancelled: 4,
+};
 
 export function BrandDashboard() {
   const navigate = useNavigate();
@@ -48,6 +62,7 @@ export function BrandDashboard() {
 
   const [viewCampaign, setViewCampaign] = useState<any>(null);
   const [editCampaign, setEditCampaign] = useState<any>(null);
+  const [campaignLoading, setCampaignLoading] = useState(false);
 
   const [brandData, setBrandData] = useState({
     name: '', email: '', phone: '', country: '', city: '',
@@ -59,21 +74,22 @@ export function BrandDashboard() {
   });
 
   const [campaignForm, setCampaignForm] = useState({
-    name: '',
+    title: '',
     description: '',
     platform: '',
-    category_ids: [] as string[],
-    min_budget: '',
-    max_budget: '',
-    num_influencers: '1',
-    startDate: '',
-    endDate: '',
-    deliverables: '',
+    category_ids: [] as number[],
+    budget_min: '',
+    budget_max: '',
+    number_of_influencers: '1',
+    start_date: '',
+    end_date: '',
+    status_id: 1,
   });
 
-  const [userCampaigns, setUserCampaigns] = useState(campaigns);
+  // ✅ Real campaigns from API
+  const [userCampaigns, setUserCampaigns] = useState<any[]>([]);
 
-  // Close action menu on outside click
+  // ── Close action menu on outside click ──
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
@@ -84,6 +100,7 @@ export function BrandDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ── Fetch brand profile ──
   useEffect(() => {
     const fetchProfile = async () => {
       const token = localStorage.getItem('brand_token');
@@ -118,6 +135,28 @@ export function BrandDashboard() {
     };
     fetchProfile();
   }, [navigate]);
+
+  // ── ✅ Fetch campaigns from API ──
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      const token = localStorage.getItem('brand_token');
+      if (!token) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/campaigns/get-campaigns`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        });
+        const result = await response.json();
+        console.log('Campaigns Response:', result);
+        if (result.success) {
+          setUserCampaigns(result.data || []);
+        }
+      } catch (error) {
+        console.error('Fetch campaigns error:', error);
+      }
+    };
+    fetchCampaigns();
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -161,63 +200,192 @@ export function BrandDashboard() {
     if (tab === 'browse') navigate('/browse');
   };
 
-  const toggleCampaignCategory = (cat: string) => {
+  const toggleCampaignCategory = (id: number) => {
     setCampaignForm(prev => ({
       ...prev,
-      category_ids: prev.category_ids.includes(cat)
-        ? prev.category_ids.filter(c => c !== cat)
-        : [...prev.category_ids, cat],
+      category_ids: prev.category_ids.includes(id)
+        ? prev.category_ids.filter(c => c !== id)
+        : [...prev.category_ids, id],
     }));
   };
 
-  const handleCreateCampaign = (e: React.FormEvent) => {
+  // ── ✅ Create Campaign API ──
+  const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCampaign = {
-      id: Date.now().toString(),
-      name: campaignForm.name,
-      influencer: 'To be assigned',
-      status: 'pending',
-      budget: parseFloat(campaignForm.max_budget) || 0,
-      min_budget: campaignForm.min_budget,
-      max_budget: campaignForm.max_budget,
-      startDate: campaignForm.startDate,
-      endDate: campaignForm.endDate,
-      description: campaignForm.description,
-      platform: campaignForm.platform,
-      categories: campaignForm.category_ids,
-      num_influencers: campaignForm.num_influencers,
-      deliverables: campaignForm.deliverables,
-    };
-    setUserCampaigns([newCampaign, ...userCampaigns]);
-    alert('✅ Campaign created successfully!');
-    setCampaignForm({
-      name: '', description: '', platform: '', category_ids: [],
-      min_budget: '', max_budget: '', num_influencers: '1',
-      startDate: '', endDate: '', deliverables: '',
-    });
-    setActiveTab('manage-campaign');
-  };
+    const token = localStorage.getItem('brand_token');
+    if (!token) return;
 
-  const handleUpdateCampaign = (e: React.FormEvent) => {
-    e.preventDefault();
-    setUserCampaigns(prev =>
-      prev.map(c => c.id === editCampaign.id ? { ...c, ...editCampaign } : c)
-    );
-    setEditCampaign(null);
-    alert('✅ Campaign updated successfully!');
-  };
+    setCampaignLoading(true);
+    try {
+      const payload = {
+        title: campaignForm.title,
+        description: campaignForm.description,
+        budget_min: campaignForm.budget_min,
+        budget_max: campaignForm.budget_max,
+        start_date: campaignForm.start_date,
+        end_date: campaignForm.end_date,
+        status_id: campaignForm.status_id,
+        number_of_influencers: parseInt(campaignForm.number_of_influencers),
+        category_ids: campaignForm.category_ids,
+      };
 
-  const handleDeleteCampaign = (id: string) => {
-    if (confirm('Are you sure you want to delete this campaign?')) {
-      setUserCampaigns(prev => prev.filter(c => c.id !== id));
-      setOpenActionMenu(null);
+      console.log('Creating campaign:', payload);
+
+      const response = await fetch(`${API_BASE_URL}/campaigns/add-campaign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      console.log('Create Campaign Response:', result);
+
+      if (result.success || response.ok) {
+        alert('✅ Campaign created successfully!');
+        // Refresh campaigns list
+        const campaignsRes = await fetch(`${API_BASE_URL}/campaigns/get-campaigns`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const campaignsData = await campaignsRes.json();
+        if (campaignsData.success) setUserCampaigns(campaignsData.data || []);
+
+        setCampaignForm({
+          title: '', description: '', platform: '', category_ids: [],
+          budget_min: '', budget_max: '', number_of_influencers: '1',
+          start_date: '', end_date: '', status_id: 1,
+        });
+        setActiveTab('manage-campaign');
+      } else {
+        alert(result.message || 'Failed to create campaign');
+      }
+    } catch (error) {
+      console.error('Create campaign error:', error);
+      alert('Server error');
+    } finally {
+      setCampaignLoading(false);
     }
+  };
+
+  // ── ✅ Update Campaign API ──
+  const handleUpdateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('brand_token');
+    if (!token) return;
+
+    setCampaignLoading(true);
+    try {
+      const payload = {
+        id: editCampaign.id,
+        title: editCampaign.title || editCampaign.name,
+        description: editCampaign.description,
+        budget_min: editCampaign.budget_min || editCampaign.min_budget,
+        budget_max: editCampaign.budget_max || editCampaign.max_budget,
+        start_date: editCampaign.start_date || editCampaign.startDate,
+        end_date: editCampaign.end_date || editCampaign.endDate,
+        status_id: editCampaign.status_id || STATUS_ID_MAP[editCampaign.status] || 1,
+        number_of_influencers: parseInt(editCampaign.number_of_influencers || editCampaign.num_influencers || '1'),
+        category_ids: editCampaign.category_ids || [],
+      };
+
+      console.log('Updating campaign:', payload);
+
+      const response = await fetch(`${API_BASE_URL}/campaigns/edit-campaign`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      console.log('Update Campaign Response:', result);
+
+      if (result.success || response.ok) {
+        alert('✅ Campaign updated successfully!');
+        // Refresh campaigns
+        const campaignsRes = await fetch(`${API_BASE_URL}/campaigns/get-campaigns`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const campaignsData = await campaignsRes.json();
+        if (campaignsData.success) setUserCampaigns(campaignsData.data || []);
+        setEditCampaign(null);
+      } else {
+        alert(result.message || 'Failed to update campaign');
+      }
+    } catch (error) {
+      console.error('Update campaign error:', error);
+      alert('Server error');
+    } finally {
+      setCampaignLoading(false);
+    }
+  };
+
+  // ── ✅ Delete Campaign API ──
+  const handleDeleteCampaign = async (id: string | number) => {
+    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    const token = localStorage.getItem('brand_token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/campaigns/delete-campaign`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id }),
+      });
+
+      const result = await response.json();
+      console.log('Delete Campaign Response:', result);
+
+      if (result.success || response.ok) {
+        setUserCampaigns(prev => prev.filter(c => c.id !== id));
+        setOpenActionMenu(null);
+        alert('Campaign deleted successfully!');
+      } else {
+        alert(result.message || 'Failed to delete campaign');
+      }
+    } catch (error) {
+      console.error('Delete campaign error:', error);
+      alert('Server error');
+    }
+  };
+
+  // ── ✅ View Campaign Details API ──
+  const handleViewCampaign = async (campaign: any) => {
+    const token = localStorage.getItem('brand_token');
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/campaigns/get-campaign-details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: campaign.id }),
+      });
+      const result = await response.json();
+      console.log('Campaign Details:', result);
+      if (result.success) {
+        setViewCampaign(result.data);
+      } else {
+        setViewCampaign(campaign); // fallback to existing data
+      }
+    } catch (error) {
+      setViewCampaign(campaign); // fallback
+    }
+    setOpenActionMenu(null);
   };
 
   const toggleCategory = (category: string) => {
     setSelectedCategories(prev =>
       prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
     );
+  };
+
+  // ── Helper to get status string from campaign ──
+  const getCampaignStatus = (campaign: any): string => {
+    if (campaign.status) return campaign.status;
+    if (campaign.status_id) return STATUS_MAP[campaign.status_id] || 'pending';
+    return 'pending';
+  };
+
+  // ── Helper to get campaign name ──
+  const getCampaignName = (campaign: any): string => {
+    return campaign.title || campaign.name || 'Untitled';
   };
 
   const getStatusBadge = (status: string) => {
@@ -253,9 +421,9 @@ export function BrandDashboard() {
   if (!userData) return null;
 
   const stats = [
-    { icon: Users, label: 'Active Campaigns', value: '8', change: '+2 this week', changeType: 'positive' as const },
-    { icon: DollarSign, label: 'Total Spend', value: '$12,450', change: '+$1,200 this month', changeType: 'positive' as const },
-    { icon: TrendingUp, label: 'Hired Influencers', value: '24', change: '+6 this month', changeType: 'positive' as const },
+    { icon: Users, label: 'Active Campaigns', value: userCampaigns.filter(c => getCampaignStatus(c) === 'active').length.toString() || '0', change: 'Total active', changeType: 'positive' as const },
+    { icon: DollarSign, label: 'Total Budget', value: '$' + userCampaigns.reduce((sum, c) => sum + (parseFloat(c.budget_max || c.budget || 0)), 0).toLocaleString(), change: 'All campaigns', changeType: 'positive' as const },
+    { icon: TrendingUp, label: 'Total Campaigns', value: userCampaigns.length.toString(), change: 'All time', changeType: 'positive' as const },
     { icon: MessageSquare, label: 'Unread Messages', value: '5', change: '2 new today', changeType: 'neutral' as const },
   ];
 
@@ -329,9 +497,6 @@ export function BrandDashboard() {
         {/* Desktop Sidebar */}
         {!isMobile && (
           <aside className="w-64 min-h-[calc(100vh-120px)] bg-black border-r border-gray-800 p-6">
-            <div className="mb-4 px-4">
-              {/*<span className="text-xs text-gray-500 uppercase tracking-wider">Navigation</span>*/}
-            </div>
             <nav className="space-y-2">
               {menuItems.map((item) => {
                 const Icon = item.icon;
@@ -402,46 +567,65 @@ export function BrandDashboard() {
                 </div>
               </div>
 
+              {/* ✅ Real campaigns in overview */}
               <div className="bg-black rounded-xl p-4 md:p-6 border border-gray-800">
                 <div className="flex items-center justify-between mb-4 md:mb-6">
-                  <h2 className="text-lg md:text-xl font-semibold text-white">Active Campaigns</h2>
+                  <h2 className="text-lg md:text-xl font-semibold text-white">Recent Campaigns</h2>
                   <button onClick={() => setActiveTab('manage-campaign')} className="text-primary hover:text-secondary text-xs md:text-sm font-medium">View All</button>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-gray-800">
-                        <TableHead className="text-gray-400 py-4">Campaign Name</TableHead>
-                        <TableHead className="text-gray-400 py-4">Budget</TableHead>
-                        <TableHead className="text-gray-400 py-4">Duration</TableHead>
-                        <TableHead className="text-gray-400 py-4">Status</TableHead>
-                        <TableHead className="text-gray-400 py-4">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {userCampaigns.slice(0, 4).map((campaign) => (
-                        <TableRow key={campaign.id} className="border-gray-800">
-                          <TableCell className="font-semibold text-white py-5">{campaign.name}</TableCell>
-                          <TableCell className="text-white py-5">${campaign.budget.toLocaleString()}</TableCell>
-                          <TableCell className="text-sm text-gray-400 py-5">
-                            {new Date(campaign.startDate).toLocaleDateString()} - {new Date(campaign.endDate).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="py-5">
-                            <Badge variant="outline" className={getStatusBadge(campaign.status)}>
-                              <span className="flex items-center gap-1.5">
-                                {getStatusIcon(campaign.status)}
-                                {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                              </span>
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-5">
-                            <button onClick={() => setViewCampaign(campaign)} className="text-primary hover:text-secondary text-sm">View</button>
-                          </TableCell>
+                {userCampaigns.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Folder className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">No campaigns yet</p>
+                    <button onClick={() => setActiveTab('create-campaign')} className="mt-3 text-primary text-sm hover:underline">
+                      Create your first campaign →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-800">
+                          <TableHead className="text-gray-400 py-4">Campaign Name</TableHead>
+                          <TableHead className="text-gray-400 py-4">Budget</TableHead>
+                          <TableHead className="text-gray-400 py-4">Duration</TableHead>
+                          <TableHead className="text-gray-400 py-4">Status</TableHead>
+                          <TableHead className="text-gray-400 py-4">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {userCampaigns.slice(0, 4).map((campaign) => {
+                          const status = getCampaignStatus(campaign);
+                          return (
+                            <TableRow key={campaign.id} className="border-gray-800">
+                              <TableCell className="font-semibold text-white py-5">{getCampaignName(campaign)}</TableCell>
+                              <TableCell className="text-white py-5">
+                                {campaign.budget_min && campaign.budget_max
+                                  ? `$${campaign.budget_min} - $${campaign.budget_max}`
+                                  : `$${(campaign.budget || 0).toLocaleString()}`}
+                              </TableCell>
+                              <TableCell className="text-sm text-gray-400 py-5">
+                                {campaign.start_date ? new Date(campaign.start_date).toLocaleDateString() : '-'} -
+                                {campaign.end_date ? new Date(campaign.end_date).toLocaleDateString() : '-'}
+                              </TableCell>
+                              <TableCell className="py-5">
+                                <Badge variant="outline" className={getStatusBadge(status)}>
+                                  <span className="flex items-center gap-1.5">
+                                    {getStatusIcon(status)}
+                                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                                  </span>
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-5">
+                                <button onClick={() => handleViewCampaign(campaign)} className="text-primary hover:text-secondary text-sm">View</button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -460,121 +644,112 @@ export function BrandDashboard() {
                 </button>
               </div>
 
-              <div className="bg-black rounded-xl border border-gray-800 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-gray-800">
-                        <TableHead className="text-gray-400 py-4 pl-6">Campaign Name</TableHead>
-                        <TableHead className="text-gray-400 py-4">Categories</TableHead>
-                        <TableHead className="text-gray-400 py-4">Duration</TableHead>
-                        <TableHead className="text-gray-400 py-4">Budget</TableHead>
-                        <TableHead className="text-gray-400 py-4">Status</TableHead>
-                        <TableHead className="text-gray-400 py-4">Influencers</TableHead>
-                        <TableHead className="text-gray-400 py-4 pr-6">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {userCampaigns.map((campaign) => (
-                        <TableRow key={campaign.id} className="border-gray-800 hover:bg-gray-900/50 transition-colors">
-                          {/* Campaign Name */}
-                          <TableCell className="font-semibold text-white py-5 pl-6">{campaign.name}</TableCell>
-
-                          {/* Categories */}
-                          <TableCell className="py-5">
-                            <div className="flex flex-wrap gap-1">
-                              {(campaign.categories || ['Fashion', 'Lifestyle']).slice(0, 2).map((cat: string, i: number) => (
-                                <span key={i} className="px-2 py-0.5 bg-primary/20 text-primary rounded-full text-xs font-medium">
-                                  {cat}
-                                </span>
-                              ))}
-                            </div>
-                          </TableCell>
-
-                          {/* Duration */}
-                          <TableCell className="text-sm text-gray-400 py-5">
-                            {new Date(campaign.startDate).toLocaleDateString()} - {new Date(campaign.endDate).toLocaleDateString()}
-                          </TableCell>
-
-                          {/* Budget */}
-                          <TableCell className="text-white font-medium py-5">
-                            {campaign.min_budget && campaign.max_budget
-                              ? `$${campaign.min_budget} - $${campaign.max_budget}`
-                              : `$${campaign.budget?.toLocaleString()}`
-                            }
-                          </TableCell>
-
-                          {/* Status */}
-                          <TableCell className="py-5">
-                            <Badge variant="outline" className={getStatusBadge(campaign.status)}>
-                              <span className="flex items-center gap-1.5">
-                                {getStatusIcon(campaign.status)}
-                                {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                              </span>
-                            </Badge>
-                          </TableCell>
-
-                          {/* Influencers */}
-                          <TableCell className="text-gray-300 text-sm py-5">
-                            <div>
-                              <span>{campaign.influencer}</span>
-                              {campaign.num_influencers && parseInt(campaign.num_influencers) > 1 && (
-                                <p className="text-xs text-primary">+{parseInt(campaign.num_influencers) - 1} more</p>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          {/* ✅ Three dots action menu */}
-                          <TableCell className="py-5 pr-6">
-                            <div className="relative" ref={openActionMenu === campaign.id ? actionMenuRef : null}>
-                              <button
-                                onClick={() => setOpenActionMenu(openActionMenu === campaign.id ? null : campaign.id)}
-                                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-                              >
-                                <MoreVertical className="w-5 h-5 text-gray-400" />
-                              </button>
-
-                              {/* Dropdown Menu */}
-                              {openActionMenu === campaign.id && (
-                                <div className="absolute right-0 top-10 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
-                                  {/* View Details */}
-                                  <button
-                                    onClick={() => { setViewCampaign(campaign); setOpenActionMenu(null); }}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-gray-800 transition-colors text-sm"
-                                  >
-                                    <Eye className="w-4 h-4 text-gray-400" />
-                                    View Details
-                                  </button>
-
-                                  {/* Edit Campaign */}
-                                  <button
-                                    onClick={() => { setEditCampaign({ ...campaign }); setOpenActionMenu(null); }}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-gray-800 transition-colors text-sm"
-                                  >
-                                    <Edit2 className="w-4 h-4 text-gray-400" />
-                                    Edit Campaign
-                                  </button>
-
-                                  <div className="border-t border-gray-700 my-1" />
-
-                                  {/* Delete Campaign */}
-                                  <button
-                                    onClick={() => handleDeleteCampaign(campaign.id)}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-gray-800 transition-colors text-sm"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                    Delete Campaign
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {userCampaigns.length === 0 ? (
+                <div className="bg-black rounded-xl p-12 border border-gray-800 text-center">
+                  <Folder className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                  <p className="text-white text-xl mb-2">No campaigns yet</p>
+                  <p className="text-gray-400 text-sm mb-6">Create your first campaign to get started</p>
+                  <button onClick={() => setActiveTab('create-campaign')} className="bg-primary hover:bg-secondary text-black font-semibold px-6 py-2.5 rounded-lg">
+                    Create Campaign
+                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-black rounded-xl border border-gray-800 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-800">
+                          <TableHead className="text-gray-400 py-4 pl-6">Campaign Name</TableHead>
+                          <TableHead className="text-gray-400 py-4">Categories</TableHead>
+                          <TableHead className="text-gray-400 py-4">Duration</TableHead>
+                          <TableHead className="text-gray-400 py-4">Budget</TableHead>
+                          <TableHead className="text-gray-400 py-4">Status</TableHead>
+                          <TableHead className="text-gray-400 py-4">Influencers</TableHead>
+                          <TableHead className="text-gray-400 py-4 pr-6">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {userCampaigns.map((campaign) => {
+                          const status = getCampaignStatus(campaign);
+                          return (
+                            <TableRow key={campaign.id} className="border-gray-800 hover:bg-gray-900/50 transition-colors">
+                              <TableCell className="font-semibold text-white py-5 pl-6">{getCampaignName(campaign)}</TableCell>
+
+                              <TableCell className="py-5">
+                                <div className="flex flex-wrap gap-1">
+                                  {(campaign.categories || campaign.campaign_categories || []).slice(0, 2).map((cat: any, i: number) => (
+                                    <span key={i} className="px-2 py-0.5 bg-primary/20 text-primary rounded-full text-xs font-medium">
+                                      {cat.name || cat.category?.name || cat}
+                                    </span>
+                                  ))}
+                                  {(campaign.categories || campaign.campaign_categories || []).length === 0 && (
+                                    <span className="text-gray-500 text-xs">No categories</span>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="text-sm text-gray-400 py-5">
+                                {campaign.start_date ? new Date(campaign.start_date).toLocaleDateString() : '-'} -
+                                {campaign.end_date ? new Date(campaign.end_date).toLocaleDateString() : '-'}
+                              </TableCell>
+
+                              <TableCell className="text-white font-medium py-5">
+                                {campaign.budget_min && campaign.budget_max
+                                  ? `$${campaign.budget_min} - $${campaign.budget_max}`
+                                  : `$${(campaign.budget || 0).toLocaleString()}`}
+                              </TableCell>
+
+                              <TableCell className="py-5">
+                                <Badge variant="outline" className={getStatusBadge(status)}>
+                                  <span className="flex items-center gap-1.5">
+                                    {getStatusIcon(status)}
+                                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                                  </span>
+                                </Badge>
+                              </TableCell>
+
+                              <TableCell className="text-gray-300 text-sm py-5">
+                                {campaign.number_of_influencers || campaign.num_influencers || 1} Influencer(s)
+                              </TableCell>
+
+                              {/* Three dots menu */}
+                              <TableCell className="py-5 pr-6">
+                                <div className="relative" ref={openActionMenu === campaign.id ? actionMenuRef : null}>
+                                  <button
+                                    onClick={() => setOpenActionMenu(openActionMenu === campaign.id ? null : campaign.id)}
+                                    className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                                    <MoreVertical className="w-5 h-5 text-gray-400" />
+                                  </button>
+                                  {openActionMenu === campaign.id && (
+                                    <div className="absolute right-0 top-10 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                                      <button
+                                        onClick={() => handleViewCampaign(campaign)}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-gray-800 transition-colors text-sm">
+                                        <Eye className="w-4 h-4 text-gray-400" /> View Details
+                                      </button>
+                                      <button
+                                        onClick={() => { setEditCampaign({ ...campaign }); setOpenActionMenu(null); }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-gray-800 transition-colors text-sm">
+                                        <Edit2 className="w-4 h-4 text-gray-400" /> Edit Campaign
+                                      </button>
+                                      <div className="border-t border-gray-700 my-1" />
+                                      <button
+                                        onClick={() => handleDeleteCampaign(campaign.id)}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-gray-800 transition-colors text-sm">
+                                        <Trash2 className="w-4 h-4" /> Delete Campaign
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -591,8 +766,8 @@ export function BrandDashboard() {
                   {/* 1. Campaign Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Campaign Name</label>
-                    <Input value={campaignForm.name}
-                      onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })}
+                    <Input value={campaignForm.title}
+                      onChange={(e) => setCampaignForm({ ...campaignForm, title: e.target.value })}
                       placeholder="Enter campaign name" className="bg-gray-900 border-gray-700 text-white" required />
                   </div>
 
@@ -605,38 +780,28 @@ export function BrandDashboard() {
                       className="bg-gray-900 border-gray-700 text-white min-h-[120px]" required />
                   </div>
 
-                  {/* 3. Platform — select ONE */}
+                  {/* 3. Platform */}
                   <div>
-  <label className="block text-sm font-medium text-gray-300 mb-2">
-    Platform 
-  </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Platform</label>
+                    <select value={campaignForm.platform || ""}
+                      onChange={(e) => setCampaignForm({ ...campaignForm, platform: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-lg bg-gray-900 text-white border border-gray-700 focus:outline-none focus:border-primary">
+                      <option value="" disabled>Select Platform</option>
+                      {apiPlatforms.map((platform) => (
+                        <option key={platform.id} value={platform.name}>{platform.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-  <select
-    value={campaignForm.platform || ""}
-    onChange={(e) =>
-      setCampaignForm({ ...campaignForm, platform: e.target.value })
-    }
-    className="w-full px-4 py-2 rounded-md bg-gray-800 text-gray-300 border border-gray-700 focus:outline-none focus:border-primary"
-  >
-    <option value="" disabled>Select Platform</option>
-
-    {apiPlatforms.map((platform) => (
-      <option key={platform.id} value={platform.name}>
-        {platform.name}
-      </option>
-    ))}
-  </select>
-</div>
-
-                  {/* 4. Categories — select multiple */}
+                  {/* 4. Categories — uses numeric IDs for API */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Categories </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Categories</label>
                     <div className="flex flex-wrap gap-2">
                       {apiCategories.map((category) => (
-                        <button key={category.id || category.slug} type="button"
-                          onClick={() => toggleCampaignCategory(category.name)}
+                        <button key={category.id} type="button"
+                          onClick={() => toggleCampaignCategory(category.id)}
                           className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                            campaignForm.category_ids.includes(category.name)
+                            campaignForm.category_ids.includes(category.id)
                               ? 'bg-primary text-black border-primary'
                               : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-500'
                           }`}>
@@ -652,14 +817,14 @@ export function BrandDashboard() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Min Budget</label>
-                        <Input value={campaignForm.min_budget}
-                          onChange={(e) => setCampaignForm({ ...campaignForm, min_budget: e.target.value })}
+                        <Input value={campaignForm.budget_min}
+                          onChange={(e) => setCampaignForm({ ...campaignForm, budget_min: e.target.value })}
                           placeholder="0" type="number" className="bg-gray-900 border-gray-700 text-white" required />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Max Budget</label>
-                        <Input value={campaignForm.max_budget}
-                          onChange={(e) => setCampaignForm({ ...campaignForm, max_budget: e.target.value })}
+                        <Input value={campaignForm.budget_max}
+                          onChange={(e) => setCampaignForm({ ...campaignForm, budget_max: e.target.value })}
                           placeholder="0" type="number" className="bg-gray-900 border-gray-700 text-white" required />
                       </div>
                     </div>
@@ -668,8 +833,8 @@ export function BrandDashboard() {
                   {/* 6. Number of Influencers */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Number of Influencers</label>
-                    <select value={campaignForm.num_influencers}
-                      onChange={(e) => setCampaignForm({ ...campaignForm, num_influencers: e.target.value })}
+                    <select value={campaignForm.number_of_influencers}
+                      onChange={(e) => setCampaignForm({ ...campaignForm, number_of_influencers: e.target.value })}
                       className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white">
                       {[1,2,3,4,5,6,7,8,9,10].map(n => (
                         <option key={n} value={n}>{n} Influencer{n > 1 ? 's' : ''}</option>
@@ -681,30 +846,35 @@ export function BrandDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">Start Date</label>
-                      <Input value={campaignForm.startDate}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, startDate: e.target.value })}
+                      <Input value={campaignForm.start_date}
+                        onChange={(e) => setCampaignForm({ ...campaignForm, start_date: e.target.value })}
                         type="date" className="bg-gray-900 border-gray-700 text-white" required />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">End Date</label>
-                      <Input value={campaignForm.endDate}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, endDate: e.target.value })}
+                      <Input value={campaignForm.end_date}
+                        onChange={(e) => setCampaignForm({ ...campaignForm, end_date: e.target.value })}
                         type="date" className="bg-gray-900 border-gray-700 text-white" required />
                     </div>
                   </div>
 
-                  {/* 8. Deliverables */}
+                  {/* 8. Status */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Deliverables</label>
-                    <Textarea value={campaignForm.deliverables}
-                      onChange={(e) => setCampaignForm({ ...campaignForm, deliverables: e.target.value })}
-                      placeholder="What do you need from influencers?"
-                      className="bg-gray-900 border-gray-700 text-white min-h-[100px]" />
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
+                    <select value={campaignForm.status_id}
+                      onChange={(e) => setCampaignForm({ ...campaignForm, status_id: parseInt(e.target.value) })}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white">
+                      <option value={1}>Pending</option>
+                      <option value={2}>Active</option>
+                      <option value={3}>Completed</option>
+                      <option value={4}>Cancelled</option>
+                    </select>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                    <Button type="submit" className="flex-1 bg-primary hover:bg-secondary text-black font-medium">
-                      Create Campaign
+                    <Button type="submit" disabled={campaignLoading}
+                      className="flex-1 bg-primary hover:bg-secondary text-black font-medium">
+                      {campaignLoading ? 'Creating...' : 'Create Campaign'}
                     </Button>
                     <Button type="button" onClick={() => setActiveTab('overview')}
                       className="flex-1 bg-white hover:bg-gray-100 text-black font-medium">
@@ -891,42 +1061,43 @@ export function BrandDashboard() {
         <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-xl font-bold text-black">{viewCampaign.name}</h2>
+              <h2 className="text-xl font-bold text-black">{getCampaignName(viewCampaign)}</h2>
               <button onClick={() => setViewCampaign(null)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-3">
               <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline" className={getStatusBadge(viewCampaign.status)}>
+                <Badge variant="outline" className={getStatusBadge(getCampaignStatus(viewCampaign))}>
                   <span className="flex items-center gap-1.5">
-                    {getStatusIcon(viewCampaign.status)}
-                    {viewCampaign.status.charAt(0).toUpperCase() + viewCampaign.status.slice(1)}
+                    {getStatusIcon(getCampaignStatus(viewCampaign))}
+                    {getCampaignStatus(viewCampaign).charAt(0).toUpperCase() + getCampaignStatus(viewCampaign).slice(1)}
                   </span>
                 </Badge>
               </div>
               {[
                 { label: 'Description', value: viewCampaign.description },
                 { label: 'Platform', value: viewCampaign.platform },
-                { label: 'Budget', value: viewCampaign.min_budget && viewCampaign.max_budget
-                  ? `$${viewCampaign.min_budget} - $${viewCampaign.max_budget}`
-                  : `$${viewCampaign.budget?.toLocaleString()}` },
-                { label: 'Duration', value: `${new Date(viewCampaign.startDate).toLocaleDateString()} - ${new Date(viewCampaign.endDate).toLocaleDateString()}` },
-                { label: 'No. of Influencers', value: viewCampaign.num_influencers || '1' },
-                { label: 'Influencer', value: viewCampaign.influencer },
-                { label: 'Deliverables', value: viewCampaign.deliverables },
+                { label: 'Budget', value: viewCampaign.budget_min && viewCampaign.budget_max
+                  ? `$${viewCampaign.budget_min} - $${viewCampaign.budget_max}`
+                  : `$${(viewCampaign.budget || 0).toLocaleString()}` },
+                { label: 'Duration', value: `${viewCampaign.start_date ? new Date(viewCampaign.start_date).toLocaleDateString() : '-'} - ${viewCampaign.end_date ? new Date(viewCampaign.end_date).toLocaleDateString() : '-'}` },
+                { label: 'No. of Influencers', value: String(viewCampaign.number_of_influencers || viewCampaign.num_influencers || 1) },
               ].map((item) => item.value && (
                 <div key={item.label} className="bg-gray-50 rounded-lg p-4">
                   <p className="text-xs text-gray-500 mb-1">{item.label}</p>
                   <p className="text-gray-800 font-medium text-sm">{item.value}</p>
                 </div>
               ))}
-              {viewCampaign.categories?.length > 0 && (
+              {/* Categories */}
+              {(viewCampaign.categories || viewCampaign.campaign_categories || []).length > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-xs text-gray-500 mb-2">Categories</p>
                   <div className="flex flex-wrap gap-1">
-                    {viewCampaign.categories.map((cat: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 bg-primary/20 text-primary rounded-full text-xs">{cat}</span>
+                    {(viewCampaign.categories || viewCampaign.campaign_categories || []).map((cat: any, i: number) => (
+                      <span key={i} className="px-2 py-0.5 bg-primary/20 text-primary rounded-full text-xs">
+                        {cat.name || cat.category?.name || cat}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -960,26 +1131,30 @@ export function BrandDashboard() {
             <form onSubmit={handleUpdateCampaign} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Campaign Name</label>
-                <Input value={editCampaign.name} onChange={(e) => setEditCampaign({ ...editCampaign, name: e.target.value })} required />
+                <Input
+                  value={editCampaign.title || editCampaign.name || ''}
+                  onChange={(e) => setEditCampaign({ ...editCampaign, title: e.target.value, name: e.target.value })}
+                  required />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <Textarea value={editCampaign.description} onChange={(e) => setEditCampaign({ ...editCampaign, description: e.target.value })} className="min-h-[100px]" />
+                <Textarea value={editCampaign.description || ''} onChange={(e) => setEditCampaign({ ...editCampaign, description: e.target.value })} className="min-h-[100px]" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Min Budget ($)</label>
-                  <Input value={editCampaign.min_budget || editCampaign.budget} onChange={(e) => setEditCampaign({ ...editCampaign, min_budget: e.target.value })} type="number" />
+                  <Input value={editCampaign.budget_min || editCampaign.min_budget || ''} onChange={(e) => setEditCampaign({ ...editCampaign, budget_min: e.target.value })} type="number" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Max Budget ($)</label>
-                  <Input value={editCampaign.max_budget || editCampaign.budget} onChange={(e) => setEditCampaign({ ...editCampaign, max_budget: e.target.value })} type="number" />
+                  <Input value={editCampaign.budget_max || editCampaign.max_budget || ''} onChange={(e) => setEditCampaign({ ...editCampaign, budget_max: e.target.value })} type="number" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">No. of Influencers</label>
-                <select value={editCampaign.num_influencers || '1'}
-                  onChange={(e) => setEditCampaign({ ...editCampaign, num_influencers: e.target.value })}
+                <select
+                  value={editCampaign.number_of_influencers || editCampaign.num_influencers || '1'}
+                  onChange={(e) => setEditCampaign({ ...editCampaign, number_of_influencers: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800">
                   {[1,2,3,4,5,6,7,8,9,10].map(n => (
                     <option key={n} value={n}>{n} Influencer{n > 1 ? 's' : ''}</option>
@@ -989,31 +1164,32 @@ export function BrandDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-                  <Input value={editCampaign.startDate} onChange={(e) => setEditCampaign({ ...editCampaign, startDate: e.target.value })} type="date" />
+                  <Input value={editCampaign.start_date || editCampaign.startDate || ''} onChange={(e) => setEditCampaign({ ...editCampaign, start_date: e.target.value })} type="date" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-                  <Input value={editCampaign.endDate} onChange={(e) => setEditCampaign({ ...editCampaign, endDate: e.target.value })} type="date" />
+                  <Input value={editCampaign.end_date || editCampaign.endDate || ''} onChange={(e) => setEditCampaign({ ...editCampaign, end_date: e.target.value })} type="date" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select value={editCampaign.status}
-                  onChange={(e) => setEditCampaign({ ...editCampaign, status: e.target.value })}
+                <select
+                  value={editCampaign.status_id || STATUS_ID_MAP[editCampaign.status] || 1}
+                  onChange={(e) => setEditCampaign({ ...editCampaign, status_id: parseInt(e.target.value) })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800">
-                  <option value="pending">Pending</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value={1}>Pending</option>
+                  <option value={2}>Active</option>
+                  <option value={3}>Completed</option>
+                  <option value={4}>Cancelled</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Deliverables</label>
-                <Textarea value={editCampaign.deliverables} onChange={(e) => setEditCampaign({ ...editCampaign, deliverables: e.target.value })} className="min-h-[80px]" />
-              </div>
               <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1 bg-primary hover:bg-secondary text-black font-semibold">Save Changes</Button>
-                <Button type="button" onClick={() => setEditCampaign(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">Cancel</Button>
+                <Button type="submit" disabled={campaignLoading} className="flex-1 bg-primary hover:bg-secondary text-black font-semibold">
+                  {campaignLoading ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <Button type="button" onClick={() => setEditCampaign(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">
+                  Cancel
+                </Button>
               </div>
             </form>
           </div>
