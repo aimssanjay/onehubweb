@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   ArrowLeft, MapPin, Globe, Instagram, Twitter, Youtube,
-  Edit, Building2, Star, Users, CheckCircle
+  Edit, Building2, Star, Users, CheckCircle, Camera, Upload
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
 
@@ -10,40 +10,116 @@ export function BrandPublicProfile() {
   const navigate = useNavigate();
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [imageSaving, setImageSaving] = useState(false);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+  const profileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchProfile = async () => {
+    const token = localStorage.getItem('brand_token');
+    if (!token) {
+      navigate('/brand/login');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/brands/get-profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const result = await response.json();
+      console.log('Brand Public Profile Response:', result);
+
+      if (result.success) {
+        setUserData(result.data);
+        setProfileImagePreview(result.data.profile_pic || null);
+        setCoverImagePreview(result.data.cover_image || result.data.brand_profile?.cover_image || null);
+      } else {
+        localStorage.removeItem('brand_token');
+        navigate('/brand/login');
+      }
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ✅ Fetch real profile from API
   useEffect(() => {
-    const fetchProfile = async () => {
-      const token = localStorage.getItem('brand_token');
-      if (!token) {
-        navigate('/brand/login');
-        return;
-      }
-      try {
-        const response = await fetch(`${API_BASE_URL}/brands/get-profile`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        const result = await response.json();
-        console.log('Brand Public Profile Response:', result);
-
-        if (result.success) {
-          setUserData(result.data);
-        } else {
-          localStorage.removeItem('brand_token');
-          navigate('/brand/login');
-        }
-      } catch (error) {
-        console.error('Profile fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchProfile();
   }, [navigate]);
+
+  const handleImageSelect = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'profile' | 'cover',
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageUrl = reader.result as string;
+      if (type === 'profile') {
+        setProfileImageFile(file);
+        setProfileImagePreview(imageUrl);
+      } else {
+        setCoverImageFile(file);
+        setCoverImagePreview(imageUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveImages = async () => {
+    const token = localStorage.getItem('brand_token');
+    if (!token) {
+      navigate('/brand/login');
+      return;
+    }
+    if (!profileImageFile && !coverImageFile) {
+      alert('Please select at least one image to upload');
+      return;
+    }
+
+    setImageSaving(true);
+    try {
+      const formData = new FormData();
+      if (profileImageFile) formData.append('profile_pic', profileImageFile);
+      if (coverImageFile) formData.append('cover_image', coverImageFile);
+
+      const response = await fetch(`${API_BASE_URL}/brands/update-profile-images`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (result.success || response.ok) {
+        setProfileImageFile(null);
+        setCoverImageFile(null);
+        await fetchProfile();
+        alert('Profile images updated successfully!');
+      } else {
+        alert(result.message || 'Failed to update profile images');
+      }
+    } catch (error) {
+      alert('Server error');
+    } finally {
+      setImageSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -99,13 +175,66 @@ export function BrandPublicProfile() {
 
         {/* Cover Photo & Profile Section */}
         <div className="bg-gray-100 rounded-2xl overflow-hidden mb-8 relative" style={{ height: '400px' }}>
-          <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300"></div>
+          {coverImagePreview ? (
+            <img src={coverImagePreview} alt="Cover" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300"></div>
+          )}
+          <button
+            onClick={() => coverInputRef.current?.click()}
+            className="absolute top-4 right-4 inline-flex items-center gap-2 rounded-lg bg-white/90 px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-white"
+          >
+            <Upload className="w-4 h-4" />
+            Change Cover
+          </button>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => handleImageSelect(e, 'cover')}
+            className="hidden"
+          />
           <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2">
-            <div className="w-32 h-32 rounded-full bg-primary flex items-center justify-center text-black text-5xl font-bold border-8 border-white shadow-xl">
-              {companyName.charAt(0).toUpperCase()}
+            <div className="relative">
+              {profileImagePreview ? (
+                <img
+                  src={profileImagePreview}
+                  alt={companyName}
+                  className="w-32 h-32 rounded-full object-cover border-8 border-white shadow-xl"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-primary flex items-center justify-center text-black text-5xl font-bold border-8 border-white shadow-xl">
+                  {companyName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <button
+                onClick={() => profileInputRef.current?.click()}
+                className="absolute bottom-2 right-2 rounded-full bg-black p-2 text-white shadow-md hover:bg-gray-800"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              <input
+                ref={profileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => handleImageSelect(e, 'profile')}
+                className="hidden"
+              />
             </div>
           </div>
         </div>
+
+        {(profileImageFile || coverImageFile) && (
+          <div className="mb-8 flex justify-center">
+            <button
+              onClick={handleSaveImages}
+              disabled={imageSaving}
+              className="rounded-lg bg-black px-6 py-3 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {imageSaving ? 'Saving Images...' : 'Save Images'}
+            </button>
+          </div>
+        )}
 
         {/* Brand Name & Info */}
         <div className="text-center mt-20 mb-8">
@@ -209,7 +338,7 @@ export function BrandPublicProfile() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-6">
+          {/*<div className="grid grid-cols-3 gap-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <CheckCircle className="w-6 h-6 text-primary" />
@@ -237,7 +366,7 @@ export function BrandPublicProfile() {
               </div>
               <div className="text-sm text-gray-600">Rating</div>
             </div>
-          </div>
+          </div>*/}
         </div>
       </div>
     </div>
