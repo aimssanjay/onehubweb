@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   ArrowLeft, MapPin, Globe, Instagram, Twitter, Youtube,
-  Edit, Building2, Star, Users, CheckCircle, Camera, Upload
+  Edit, Building2, Star, Users, CheckCircle, Camera, Upload, Music2
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
+import { Navbar } from '../components/Navbar';
+import { toast } from 'sonner';
 
 export function BrandPublicProfile() {
   const navigate = useNavigate();
@@ -39,6 +41,8 @@ export function BrandPublicProfile() {
         setUserData(result.data);
         setProfileImagePreview(result.data.profile_pic || null);
         setCoverImagePreview(result.data.cover_image || result.data.brand_profile?.cover_image || null);
+        localStorage.setItem('brand_user', JSON.stringify(result.data));
+        window.dispatchEvent(new Event('auth-state-changed'));
       } else {
         localStorage.removeItem('brand_token');
         navigate('/brand/login');
@@ -62,7 +66,7 @@ export function BrandPublicProfile() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      toast.error('Image must be less than 5MB');
       return;
     }
 
@@ -87,7 +91,7 @@ export function BrandPublicProfile() {
       return;
     }
     if (!profileImageFile && !coverImageFile) {
-      alert('Please select at least one image to upload');
+      toast.error('Please select at least one image to upload');
       return;
     }
 
@@ -110,12 +114,12 @@ export function BrandPublicProfile() {
         setProfileImageFile(null);
         setCoverImageFile(null);
         await fetchProfile();
-        alert('Profile images updated successfully!');
+        toast.success('Profile images updated successfully');
       } else {
-        alert(result.message || 'Failed to update profile images');
+        toast.error(result.message || 'Failed to update profile images');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setImageSaving(false);
     }
@@ -141,17 +145,20 @@ export function BrandPublicProfile() {
     ? `${userData.city}, ${userData.country}`
     : userData.city || userData.country || '';
   const description = userData.bio || userData.brand_profile?.description || '';
-  const website = userData.brand_profile?.website || '';
-  const instagram = userData.brand_profile?.instagram || '';
-  const twitter = userData.brand_profile?.twitter || '';
-  const youtube = userData.brand_profile?.youtube || '';
+  const socialProfile = userData.social_profile || userData.brand_social_profile || {};
+  const website = socialProfile.website || userData.brand_profile?.website || userData.website || '';
+  const instagram = socialProfile.instagram || userData.brand_profile?.instagram || userData.instagram || '';
+  const tiktok = socialProfile.tiktok || userData.brand_profile?.tiktok || userData.tiktok || '';
+  const twitter = socialProfile.twitter || userData.brand_profile?.twitter || userData.twitter || '';
+  const youtube = socialProfile.youtube || userData.brand_profile?.youtube || userData.youtube || '';
   const categories = userData.categories?.map((c: any) => c.name || c) || [];
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Top Navigation */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+    <div className="min-h-screen bg-white [&_a]:cursor-pointer [&_button]:cursor-pointer">
+      <Navbar />
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="mb-6">
           <button
             onClick={() => navigate('/brand-dashboard')}
             className="flex items-center gap-2 text-gray-600 hover:text-black transition-colors"
@@ -160,9 +167,7 @@ export function BrandPublicProfile() {
             <span>Back to Dashboard</span>
           </button>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Edit Button */}
         <div className="flex justify-end mb-4">
           <Link to="/brand-dashboard">
@@ -174,12 +179,14 @@ export function BrandPublicProfile() {
         </div>
 
         {/* Cover Photo & Profile Section */}
-        <div className="bg-gray-100 rounded-2xl overflow-hidden mb-8 relative" style={{ height: '400px' }}>
-          {coverImagePreview ? (
-            <img src={coverImagePreview} alt="Cover" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300"></div>
-          )}
+        <div className="mb-8 relative" style={{ height: '400px' }}>
+          <div className="bg-gray-100 rounded-2xl overflow-hidden h-full">
+            {coverImagePreview ? (
+              <img src={coverImagePreview} alt="Cover" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300"></div>
+            )}
+          </div>
           <button
             onClick={() => coverInputRef.current?.click()}
             className="absolute top-4 right-4 inline-flex items-center gap-2 rounded-lg bg-white/90 px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-white"
@@ -237,7 +244,7 @@ export function BrandPublicProfile() {
         )}
 
         {/* Brand Name & Info */}
-        <div className="text-center mt-20 mb-8">
+        <div className="text-center mt-24 mb-8">
           {/* ✅ Real company name */}
           <h1 className="text-4xl font-bold text-black mb-2">{companyName}</h1>
           <div className="flex items-center justify-center gap-4 text-gray-600 mb-4">
@@ -308,6 +315,14 @@ export function BrandPublicProfile() {
                   <span>{instagram}</span>
                 </a>
               )}
+              {tiktok && (
+                <a href={tiktok.startsWith('http') ? tiktok : `https://tiktok.com/${tiktok.replace('@', '')}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 text-gray-700 hover:text-black transition-colors">
+                  <Music2 className="w-5 h-5" />
+                  <span>{tiktok}</span>
+                </a>
+              )}
               {twitter && (
                 <a href={twitter.startsWith('http') ? twitter : `https://twitter.com/${twitter.replace('@', '')}`}
                   target="_blank" rel="noopener noreferrer"
@@ -324,7 +339,7 @@ export function BrandPublicProfile() {
                   <span>{youtube}</span>
                 </a>
               )}
-              {!website && !instagram && !twitter && !youtube && (
+              {!website && !instagram && !tiktok && !twitter && !youtube && (
                 <div className="text-center py-4">
                   <p className="text-gray-400 mb-2">No social media links added yet</p>
                   <Link to="/brand-dashboard">

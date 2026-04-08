@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Instagram, Music, Youtube, Edit, Save, Plus, Trash2 } from 'lucide-react';
@@ -33,6 +33,43 @@ interface AnalyticsState {
     male: string;
   };
 }
+
+const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
+
+const DEFAULT_ANALYTICS_DATA: AnalyticsState = {
+  instagram: {
+    followers: '1.5M',
+    avgViews: '250k',
+    engagement: '5.0%',
+  },
+  tiktok: {
+    followers: '850k',
+    avgViews: '500k',
+    engagement: '7.2%',
+  },
+  youtube: {
+    followers: '2.3M',
+    avgViews: '1.2M',
+    engagement: '4.5%',
+  },
+  audienceLocation: [
+    { country: 'United States', percentage: '60' },
+    { country: 'United Kingdom', percentage: '16' },
+    { country: 'Brazil', percentage: '62' },
+    { country: 'Other', percentage: '10' },
+  ],
+  audienceAge: [
+    { range: '13-17', percentage: '60' },
+    { range: '18-24', percentage: '62' },
+    { range: '25-34', percentage: '18' },
+    { range: '35-44', percentage: '4' },
+    { range: '45-64', percentage: '1' },
+  ],
+  audienceGender: {
+    female: '70',
+    male: '30',
+  },
+};
 
 // List of countries for dropdown
 const COUNTRIES = [
@@ -98,50 +135,32 @@ export function InfluencerAnalytics() {
   const [isEditingMetrics, setIsEditingMetrics] = useState(false);
   const [isEditingDemographics, setIsEditingDemographics] = useState(false);
 
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsState>({
-    instagram: {
-      followers: '1.5M',
-      avgViews: '250k',
-      engagement: '5.0%',
-    },
-    tiktok: {
-      followers: '850k',
-      avgViews: '500k',
-      engagement: '7.2%',
-    },
-    youtube: {
-      followers: '2.3M',
-      avgViews: '1.2M',
-      engagement: '4.5%',
-    },
-    audienceLocation: [
-      { country: 'United States', percentage: '60' },
-      { country: 'United Kingdom', percentage: '16' },
-      { country: 'Brazil', percentage: '62' },
-      { country: 'Other', percentage: '10' },
-    ],
-    audienceAge: [
-      { range: '13-17', percentage: '60' },
-      { range: '18-24', percentage: '62' },
-      { range: '25-34', percentage: '18' },
-      { range: '35-44', percentage: '4' },
-      { range: '45-64', percentage: '1' },
-    ],
-    audienceGender: {
-      female: '70',
-      male: '30',
-    },
-  });
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsState>(DEFAULT_ANALYTICS_DATA);
+
+  useEffect(() => {
+    const savedAnalytics = localStorage.getItem(ANALYTICS_STORAGE_KEY);
+    if (!savedAnalytics) {
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(DEFAULT_ANALYTICS_DATA));
+      return;
+    }
+
+    try {
+      setAnalyticsData(JSON.parse(savedAnalytics));
+    } catch {
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(DEFAULT_ANALYTICS_DATA));
+      setAnalyticsData(DEFAULT_ANALYTICS_DATA);
+    }
+  }, []);
 
   const handleSaveMetrics = () => {
-    // Save to localStorage or backend
-    localStorage.setItem('influencer_analytics', JSON.stringify(analyticsData));
+    localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
+    window.dispatchEvent(new Event('influencer-analytics-updated'));
     setIsEditingMetrics(false);
   };
 
   const handleSaveDemographics = () => {
-    // Save to localStorage or backend
-    localStorage.setItem('influencer_analytics', JSON.stringify(analyticsData));
+    localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
+    window.dispatchEvent(new Event('influencer-analytics-updated'));
     setIsEditingDemographics(false);
   };
 
@@ -221,13 +240,13 @@ export function InfluencerAnalytics() {
   };
 
   return (
-    <div>
+    <div className="text-white">
       <div className="flex justify-between items-center mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Analytics</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-white">Analytics</h1>
       </div>
 
       {/* Platform Metrics Section */}
-      <div className="bg-black rounded-xl p-4 md:p-8 border border-gray-800 mb-6 md:mb-8">
+      <div className="bg-gray-900 rounded-xl p-4 md:p-8 border border-gray-800 mb-6 md:mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 md:mb-6">
           <h2 className="text-xl md:text-2xl font-bold text-white">Platform Metrics</h2>
           {isEditingMetrics ? (
@@ -281,7 +300,7 @@ export function InfluencerAnalytics() {
               <Input
                 value={currentMetrics.followers}
                 onChange={(e) => updateMetric(activePlatform, 'followers', e.target.value)}
-                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
                 placeholder="e.g., 1.5M"
               />
             ) : (
@@ -296,7 +315,7 @@ export function InfluencerAnalytics() {
               <Input
                 value={currentMetrics.avgViews}
                 onChange={(e) => updateMetric(activePlatform, 'avgViews', e.target.value)}
-                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
                 placeholder="e.g., 250k"
               />
             ) : (
@@ -311,7 +330,7 @@ export function InfluencerAnalytics() {
               <Input
                 value={currentMetrics.engagement}
                 onChange={(e) => updateMetric(activePlatform, 'engagement', e.target.value)}
-                className="bg-gray-900 border-gray-700 text-white text-xl md:text-2xl font-bold"
+                className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
                 placeholder="e.g., 5.0%"
               />
             ) : (
@@ -322,7 +341,7 @@ export function InfluencerAnalytics() {
       </div>
 
       {/* Demographics Section */}
-      <div className="bg-black rounded-xl p-4 md:p-8 border border-gray-800">
+      <div className="bg-gray-900 rounded-xl p-4 md:p-8 border border-gray-800">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
           <h2 className="text-xl md:text-2xl font-bold text-white">Audience Demographics</h2>
           {isEditingDemographics ? (
@@ -358,7 +377,7 @@ export function InfluencerAnalytics() {
                     <select
                       value={location.country}
                       onChange={(e) => updateLocation(index, 'country', e.target.value)}
-                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 md:px-4 py-2 md:py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm md:text-base"
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 md:px-4 py-2 md:py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary text-sm md:text-base"
                     >
                       <option value="">Select country...</option>
                       {COUNTRIES.map((country) => (
@@ -371,7 +390,7 @@ export function InfluencerAnalytics() {
                       <Input
                         value={location.percentage}
                         onChange={(e) => updateLocation(index, 'percentage', e.target.value)}
-                        className="bg-gray-900 border-gray-700 text-white w-20 md:w-24 text-sm md:text-base"
+                        className="bg-gray-800 border-gray-700 text-white w-20 md:w-24 text-sm md:text-base"
                         placeholder="60"
                         type="number"
                       />
@@ -389,7 +408,7 @@ export function InfluencerAnalytics() {
                 ))}
                 <button
                   onClick={addLocation}
-                  className="w-full bg-transparent border-2 border-gray-700 text-white hover:bg-gray-900 rounded-lg px-3 md:px-4 py-2 md:py-3 flex items-center justify-center gap-2 font-medium transition-colors text-sm md:text-base"
+                  className="w-full bg-transparent border-2 border-gray-700 text-white hover:bg-gray-800 rounded-lg px-3 md:px-4 py-2 md:py-3 flex items-center justify-center gap-2 font-medium transition-colors text-sm md:text-base"
                 >
                   <Plus className="w-4 h-4" />
                   Add Country
@@ -427,7 +446,7 @@ export function InfluencerAnalytics() {
                     <Input
                       value={age.percentage}
                       onChange={(e) => updateAge(index, e.target.value)}
-                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      className="bg-gray-800 border-gray-700 text-white text-sm md:text-base"
                       placeholder="60"
                       type="number"
                     />
@@ -473,7 +492,7 @@ export function InfluencerAnalytics() {
                     <Input
                       value={analyticsData.audienceGender.female}
                       onChange={(e) => updateGender('female', e.target.value)}
-                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      className="bg-gray-800 border-gray-700 text-white text-sm md:text-base"
                       placeholder="70"
                       type="number"
                     />
@@ -486,7 +505,7 @@ export function InfluencerAnalytics() {
                     <Input
                       value={analyticsData.audienceGender.male}
                       onChange={(e) => updateGender('male', e.target.value)}
-                      className="bg-gray-900 border-gray-700 text-white text-sm md:text-base"
+                      className="bg-gray-800 border-gray-700 text-white text-sm md:text-base"
                       placeholder="30"
                       type="number"
                     />
@@ -495,32 +514,34 @@ export function InfluencerAnalytics() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
-                <ResponsiveContainer width="100%" height={200} className="md:w-2/5">
-                  <PieChart>
-                    <Pie
-                      data={genderChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      <Cell fill={COLORS.female} />
-                      <Cell fill={COLORS.male} />
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1F2937',
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        color: '#FFFFFF',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-3 md:space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-8">
+                <div className="w-full md:w-2/5 h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={genderChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill={COLORS.female} />
+                        <Cell fill={COLORS.male} />
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1F2937',
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3 md:space-y-4 md:min-w-[220px]">
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.female }} />
                     <span className="text-white text-sm md:text-base">Female</span>

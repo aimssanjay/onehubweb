@@ -19,6 +19,7 @@ import { API_BASE_URL } from '../../services/api';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 import { Music2 } from "lucide-react";
+import { toast } from 'sonner';
 type TabType = 'overview' | 'profile' | 'create-campaign' | 'browse' | 'messages' | 'manage-campaign';
 type ProfileTabType = 'details' | 'social-media' | 'images' | 'account';
 
@@ -171,6 +172,8 @@ export function BrandDashboard() {
   const prefillBrandData = (data: any) => {
     const brandProfile = data.brand_profile || {};
     const socialProfile = data.social_profile || data.brand_social_profile || {};
+    const getSocialValue = (...values: any[]) =>
+      values.find((value) => typeof value === 'string' && value.trim().length > 0) || '';
 
     setBrandData({
       name: data.name || '',
@@ -184,11 +187,31 @@ export function BrandDashboard() {
     });
 
     setSocialMedia({
-      website: socialProfile.website || brandProfile.website || data.website || '',
-      instagram: socialProfile.instagram || '',
-      tiktok: socialProfile.tiktok || '',
-      youtube: socialProfile.youtube || '',
-      twitter: socialProfile.twitter || '',
+      website: getSocialValue(
+        socialProfile.website,
+        brandProfile.website,
+        data.website,
+      ),
+      instagram: getSocialValue(
+        socialProfile.instagram,
+        brandProfile.instagram,
+        data.instagram,
+      ),
+      tiktok: getSocialValue(
+        socialProfile.tiktok,
+        brandProfile.tiktok,
+        data.tiktok,
+      ),
+      youtube: getSocialValue(
+        socialProfile.youtube,
+        brandProfile.youtube,
+        data.youtube,
+      ),
+      twitter: getSocialValue(
+        socialProfile.twitter,
+        brandProfile.twitter,
+        data.twitter,
+      ),
     });
 
     setProfileImagePreview(data.profile_pic || null);
@@ -233,6 +256,7 @@ export function BrandDashboard() {
       setUserData(refetchResult.data);
       prefillBrandData(refetchResult.data);
       localStorage.setItem('brand_user', JSON.stringify(refetchResult.data));
+      window.dispatchEvent(new Event('auth-state-changed'));
     }
   };
 
@@ -255,12 +279,12 @@ export function BrandDashboard() {
       const result = await response.json();
       if (result.success || response.ok) {
         await refreshProfile(token);
-        alert('Profile details updated successfully!');
+        toast.success('Profile details updated successfully');
       } else {
-        alert(result.message || 'Failed to update profile details');
+        toast.error(result.message || 'Failed to update profile details');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setProfileSaving(false);
     }
@@ -285,12 +309,12 @@ export function BrandDashboard() {
       const result = await response.json();
       if (result.success || response.ok) {
         await refreshProfile(token);
-        alert('Social profile updated successfully!');
+        toast.success('Social profile updated successfully');
       } else {
-        alert(result.message || 'Failed to update social profile');
+        toast.error(result.message || 'Failed to update social profile');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setProfileSaving(false);
     }
@@ -300,7 +324,7 @@ export function BrandDashboard() {
     const token = localStorage.getItem('brand_token');
     if (!token) return;
     if (!profileImageFile && !coverImageFile) {
-      alert('Please select at least one image to upload');
+      toast.error('Please select at least one image to upload');
       return;
     }
 
@@ -320,12 +344,12 @@ export function BrandDashboard() {
         await refreshProfile(token);
         setProfileImageFile(null);
         setCoverImageFile(null);
-        alert('Profile images updated successfully!');
+        toast.success('Profile images updated successfully');
       } else {
-        alert(result.message || 'Failed to update profile images');
+        toast.error(result.message || 'Failed to update profile images');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setProfileSaving(false);
     }
@@ -348,12 +372,12 @@ export function BrandDashboard() {
       const result = await response.json();
       if (result.success || response.ok) {
         await refreshProfile(token);
-        alert('Account details updated successfully!');
+        toast.success('Account details updated successfully');
       } else {
-        alert(result.message || 'Failed to update account details');
+        toast.error(result.message || 'Failed to update account details');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setProfileSaving(false);
     }
@@ -367,7 +391,7 @@ export function BrandDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      toast.error('Image must be less than 5MB');
       return;
     }
 
@@ -431,7 +455,7 @@ export function BrandDashboard() {
       });
       const result = await response.json();
       if (result.success || response.ok) {
-        alert('✅ Campaign created successfully!');
+        toast.success('Campaign created successfully');
         // Refresh list
         const res = await fetch(`${API_BASE_URL}/campaigns/get-campaigns`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -441,10 +465,10 @@ export function BrandDashboard() {
         setCampaignForm({ title: '', description: '', platform: '', category_ids: [], budget_min: '', budget_max: '', number_of_influencers: '1', start_date: '', end_date: '' });
         setActiveTab('manage-campaign');
       } else {
-        alert(result.message || 'Failed to create campaign');
+        toast.error(result.message || 'Failed to create campaign');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setCampaignLoading(false);
     }
@@ -480,7 +504,7 @@ export function BrandDashboard() {
       });
       const result = await response.json();
       if (result.success || response.ok) {
-        alert('✅ Campaign updated successfully!');
+        toast.success('Campaign updated successfully');
         // ✅ Refresh to get updated categories
         const res = await fetch(`${API_BASE_URL}/campaigns/get-campaigns`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -489,10 +513,10 @@ export function BrandDashboard() {
         if (data.success) setUserCampaigns(data.data || []);
         setEditCampaign(null);
       } else {
-        alert(result.message || 'Failed to update campaign');
+        toast.error(result.message || 'Failed to update campaign');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     } finally {
       setCampaignLoading(false);
     }
@@ -513,11 +537,12 @@ export function BrandDashboard() {
       if (result.success || response.ok) {
         setUserCampaigns(prev => prev.filter(c => c.id !== id));
         setOpenActionMenu(null);
+        toast.success('Campaign deleted successfully');
       } else {
-        alert(result.message || 'Failed to delete');
+        toast.error(result.message || 'Failed to delete campaign');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     }
   };
 
@@ -624,7 +649,7 @@ export function BrandDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-white pb-16 md:pb-0">
+    <div className="min-h-screen bg-white pb-16 md:pb-0 [&_a]:cursor-pointer [&_button]:cursor-pointer">
       <Navbar />
 
       {/* Portal bar */}

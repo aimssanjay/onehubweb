@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { Button } from '@/app/components/ui/button';
@@ -11,9 +11,21 @@ import {
   ExternalLink, Search, Send, Filter,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
+import { useCategories } from '../hooks/useCategories';
+import { toast } from 'sonner';
+import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
   'notifications' | 'analytics' | 'content' | 'settings';
+
+type SharedAnalyticsData = {
+  instagram: { followers: string; avgViews: string; engagement: string };
+  tiktok: { followers: string; avgViews: string; engagement: string };
+  youtube: { followers: string; avgViews: string; engagement: string };
+  audienceLocation: Array<{ country: string; percentage: string }>;
+  audienceAge: Array<{ range: string; percentage: string }>;
+  audienceGender: { female: string; male: string };
+};
 
 // Country list
 const COUNTRIES = [
@@ -59,8 +71,31 @@ const mockNotifications = [
   { id: '5', brand: 'BeautyPlus', brandInitial: 'B', brandColor: 'bg-purple-500', message: '@llabeauty mentioned you in a post.', time: '2d ago', isNew: false },
 ];
 
+const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
+
+const DEFAULT_ANALYTICS_DATA: SharedAnalyticsData = {
+  instagram: { followers: '1.5M', avgViews: '250k', engagement: '5.0%' },
+  tiktok: { followers: '850k', avgViews: '500k', engagement: '7.2%' },
+  youtube: { followers: '2.3M', avgViews: '1.2M', engagement: '4.5%' },
+  audienceLocation: [
+    { country: 'United States', percentage: '60' },
+    { country: 'United Kingdom', percentage: '16' },
+    { country: 'Brazil', percentage: '62' },
+    { country: 'Other', percentage: '10' },
+  ],
+  audienceAge: [
+    { range: '13-17', percentage: '60' },
+    { range: '18-24', percentage: '62' },
+    { range: '25-34', percentage: '18' },
+    { range: '35-44', percentage: '4' },
+    { range: '45-64', percentage: '1' },
+  ],
+  audienceGender: { female: '70', male: '30' },
+};
+
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
+  const { categories: apiCategories } = useCategories();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -73,11 +108,48 @@ export default function InfluencerDashboard() {
   const [messageText, setMessageText] = useState('');
   const [countrySearch, setCountrySearch] = useState('');
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<SharedAnalyticsData>(DEFAULT_ANALYTICS_DATA);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const profileImageInputRef = useRef<HTMLInputElement>(null);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
-    name: '', phone: '', country: '', city: '', bio: '',
+    name: '', phone: '', country: '', city: '', bio: '', gender: '', date_of_birth: '',
   });
+
+  const normalizeDateInput = (value: string) => {
+    if (!value) return '';
+    return value.includes('T') ? value.split('T')[0] : value;
+  };
+
+  const applyProfileData = (data: any) => {
+    setUserData(data);
+    setProfileImagePreview(data.profile_pic || null);
+    setEditForm({
+      name: data.name || '',
+      phone: data.phone || '',
+      country: data.country || '',
+      city: data.city || '',
+      bio: data.bio || '',
+      gender: data.gender || '',
+      date_of_birth: normalizeDateInput(data.date_of_birth || ''),
+    });
+    setSelectedCategoryIds(
+      (data.categories || [])
+        .map((cat: any) => cat.id || cat.category_id)
+        .filter(Boolean)
+    );
+  };
+
+  const resetEditState = () => {
+    if (!userData) return;
+    applyProfileData(userData);
+    setIsEditing(false);
+  };
 
   // Fetch profile
   useEffect(() => {
@@ -91,14 +163,7 @@ export default function InfluencerDashboard() {
         });
         const result = await response.json();
         if (result.success) {
-          setUserData(result.data);
-          setEditForm({
-            name: result.data.name || '',
-            phone: result.data.phone || '',
-            country: result.data.country || '',
-            city: result.data.city || '',
-            bio: result.data.bio || '',
-          });
+          applyProfileData(result.data);
         } else {
           localStorage.removeItem('influencer_token');
           navigate('/influencer/login');
@@ -121,26 +186,107 @@ export default function InfluencerDashboard() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const loadAnalyticsData = () => {
+      const savedAnalytics = localStorage.getItem(ANALYTICS_STORAGE_KEY);
+      if (!savedAnalytics) {
+        setAnalyticsData(DEFAULT_ANALYTICS_DATA);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(savedAnalytics);
+        setAnalyticsData({
+          instagram: parsed.instagram || DEFAULT_ANALYTICS_DATA.instagram,
+          tiktok: parsed.tiktok || DEFAULT_ANALYTICS_DATA.tiktok,
+          youtube: parsed.youtube || DEFAULT_ANALYTICS_DATA.youtube,
+          audienceLocation: parsed.audienceLocation || DEFAULT_ANALYTICS_DATA.audienceLocation,
+          audienceAge: parsed.audienceAge || DEFAULT_ANALYTICS_DATA.audienceAge,
+          audienceGender: parsed.audienceGender || DEFAULT_ANALYTICS_DATA.audienceGender,
+        });
+      } catch {
+        setAnalyticsData(DEFAULT_ANALYTICS_DATA);
+      }
+    };
+
+    loadAnalyticsData();
+    window.addEventListener('influencer-analytics-updated', loadAnalyticsData as EventListener);
+    window.addEventListener('focus', loadAnalyticsData);
+
+    return () => {
+      window.removeEventListener('influencer-analytics-updated', loadAnalyticsData as EventListener);
+      window.removeEventListener('focus', loadAnalyticsData);
+    };
+  }, []);
+
+  const refreshProfile = async (token: string) => {
+    const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    const result = await response.json();
+    if (result.success) {
+      applyProfileData(result.data);
+      localStorage.setItem('influencer_user', JSON.stringify(result.data));
+      window.dispatchEvent(new Event('auth-state-changed'));
+    }
+  };
+
+  const toggleCategory = (id: number) => {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((categoryId) => categoryId !== id) : [...prev, id]
+    );
+  };
+
   // Save profile to API
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('influencer_token');
     if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/influencers/update-profile`, {
+      if (profileImageFile) {
+        const formData = new FormData();
+        formData.append('profile_pic', profileImageFile);
+        const imageResponse = await fetch(`${API_BASE_URL}/users/update-profile-picture`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+        });
+        const imageResult = await imageResponse.json();
+        if (!(imageResult.success || imageResponse.ok)) {
+          toast.error(imageResult.message || 'Failed to update profile image');
+          return;
+        }
+      }
+
+      const profileResponse = await fetch(`${API_BASE_URL}/influencers/update-profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(editForm),
       });
-      const result = await response.json();
-      if (result.success || response.ok) {
-        setUserData({ ...userData, ...editForm });
+
+      const profileResult = await profileResponse.json();
+      if (!(profileResult.success || profileResponse.ok)) {
+        toast.error(profileResult.message || 'Failed to update profile');
+        return;
+      }
+
+      const categoriesResponse = await fetch(`${API_BASE_URL}/influencers/update-categories`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ category_ids: selectedCategoryIds }),
+      });
+      const categoriesResult = await categoriesResponse.json();
+
+      if (categoriesResult.success || categoriesResponse.ok) {
+        await refreshProfile(token);
+        setProfileImageFile(null);
         setIsEditing(false);
-        alert('Profile updated successfully!');
+        toast.success('Profile updated successfully');
       } else {
-        alert(result.message || 'Failed to update profile');
+        toast.error(categoriesResult.message || 'Failed to update categories');
       }
     } catch (error) {
-      alert('Server error');
+      toast.error('Server error');
     }
   };
 
@@ -155,9 +301,77 @@ export default function InfluencerDashboard() {
     setIsMobileMenuOpen(false);
   };
 
+  const handleProfileImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setProfileImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setProfileImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleChangePassword = () => {
+    if (!passwordForm.password || !passwordForm.confirmPassword) {
+      toast.error('Please fill both password fields');
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (passwordForm.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    toast.success('Password changed successfully');
+    setShowChangePasswordModal(false);
+    setPasswordForm({ password: '', confirmPassword: '' });
+  };
+
   const filteredCountries = COUNTRIES.filter(c =>
     c.toLowerCase().includes(countrySearch.toLowerCase())
   );
+  const femalePct = Number(analyticsData.audienceGender.female) || 0;
+  const malePct = Number(analyticsData.audienceGender.male) || 0;
+  const overviewLocations = analyticsData.audienceLocation.slice(0, 4).map((loc, index) => ({
+    country: loc.country || `Location ${index + 1}`,
+    pct: Number(loc.percentage) || 0,
+    color: ['bg-yellow-400', 'bg-blue-400', 'bg-purple-400', 'bg-gray-400'][index] || 'bg-gray-400',
+  }));
+  const profileLocations = analyticsData.audienceLocation.slice(0, 4).map((loc, index) => ({
+    country: loc.country || `Location ${index + 1}`,
+    pct: Number(loc.percentage) || 0,
+    color: ['bg-primary', 'bg-primary', 'bg-primary', 'bg-primary'][index] || 'bg-primary',
+  }));
+  const socialPerformanceStats = [
+    {
+      name: 'Instagram',
+      followers: analyticsData.instagram.followers,
+      engagement: analyticsData.instagram.engagement,
+      icon: Instagram,
+      color: 'from-purple-500 to-pink-500',
+    },
+    {
+      name: 'YouTube',
+      followers: analyticsData.youtube.followers,
+      engagement: analyticsData.youtube.engagement,
+      icon: Youtube,
+      color: 'from-red-600 to-red-500',
+    },
+    {
+      name: 'TikTok',
+      followers: analyticsData.tiktok.followers,
+      engagement: analyticsData.tiktok.engagement,
+      icon: Video,
+      color: 'from-gray-700 to-gray-800',
+    },
+  ];
 
   if (loading) {
     return (
@@ -185,7 +399,7 @@ export default function InfluencerDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-16 md:pb-0">
+    <div className="min-h-screen bg-gray-950 pb-16 md:pb-0 [&_a]:cursor-pointer [&_button]:cursor-pointer">
       <Navbar />
 
       {/* Portal bar */}
@@ -384,15 +598,11 @@ export default function InfluencerDashboard() {
           <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-white">Social Media Performance</h2>
-              <button className="text-primary text-xs hover:underline">View All →</button>
+              <button onClick={() => setActiveTab('analytics')} className="text-primary text-xs hover:underline">View All →</button>
             </div>
             {/* Platform Stats */}
             <div className="grid grid-cols-3 gap-2 mb-4">
-              {[
-                { name: 'Instagram', followers: '225K', engagement: '6.2%', icon: Instagram, color: 'from-purple-500 to-pink-500', platformId: 1 },
-                { name: 'YouTube', followers: '120K', engagement: '4.8%', icon: Youtube, color: 'from-red-600 to-red-500', platformId: 2 },
-                { name: 'TikTok', followers: '58K', engagement: '7.5%', icon: Video, color: 'from-gray-700 to-gray-800', platformId: 3 },
-              ].map((s) => {
+              {socialPerformanceStats.map((s) => {
                 const Icon = s.icon;
                 return (
                   <div key={s.name} className="bg-gray-800 rounded-lg p-3 text-center">
@@ -599,7 +809,7 @@ export default function InfluencerDashboard() {
         <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-white text-sm">Audience Snapshot</h3>
-            <button className="text-primary text-xs hover:underline">View All →</button>
+            <button onClick={() => setActiveTab('analytics')} className="text-primary text-xs hover:underline">View All →</button>
           </div>
 
           {/* Gender */}
@@ -609,31 +819,26 @@ export default function InfluencerDashboard() {
               <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
                 <circle cx="18" cy="18" r="13" fill="none" stroke="#374151" strokeWidth="5" />
                 <circle cx="18" cy="18" r="13" fill="none" stroke="#ec4899" strokeWidth="5"
-                  strokeDasharray="78 22" strokeLinecap="round" />
+                  strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
                 <circle cx="18" cy="18" r="13" fill="none" stroke="#3b82f6" strokeWidth="5"
-                  strokeDasharray="22 78" strokeDashoffset="-78" strokeLinecap="round" />
+                  strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
               </svg>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-pink-500"></div>
-                <span className="text-white text-xs font-medium">78% Female</span>
+                <span className="text-white text-xs font-medium">{femalePct}% Female</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                <span className="text-white text-xs font-medium">22% Male</span>
+                <span className="text-white text-xs font-medium">{malePct}% Male</span>
               </div>
             </div>
           </div>
 
           {/* Top Locations */}
           <p className="text-xs font-medium text-gray-400 mb-3">Top Locations</p>
-          {[
-            { country: 'India', pct: 68, color: 'bg-yellow-400' },
-            { country: 'USA', pct: 12, color: 'bg-blue-400' },
-            { country: 'UK', pct: 7, color: 'bg-purple-400' },
-            { country: 'Other', pct: 13, color: 'bg-gray-400' },
-          ].map((loc) => (
+          {overviewLocations.map((loc) => (
             <div key={loc.country} className="mb-2">
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-300">{loc.country}</span>
@@ -673,14 +878,33 @@ export default function InfluencerDashboard() {
                     {/* Avatar + Name */}
                     <div className="flex items-start gap-4 mb-6 pb-6 border-b border-gray-800">
                       <div className="relative flex-shrink-0">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black text-3xl font-bold">
-                          {userData.name?.[0]?.toUpperCase()}
-                        </div>
+                        {profileImagePreview || userData.profile_pic ? (
+                          <img
+                            src={profileImagePreview || userData.profile_pic}
+                            alt={userData.name || 'Influencer'}
+                            className="w-20 h-20 rounded-full object-cover border-2 border-gray-700"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black text-3xl font-bold">
+                            {userData.name?.[0]?.toUpperCase()}
+                          </div>
+                        )}
                         {isEditing && (
-                          <button className="absolute bottom-0 right-0 w-7 h-7 bg-primary rounded-full flex items-center justify-center text-black">
+                          <button
+                            onClick={() => profileImageInputRef.current?.click()}
+                            type="button"
+                            className="absolute bottom-0 right-0 w-7 h-7 bg-primary rounded-full flex items-center justify-center text-black"
+                          >
                             <Camera className="w-3 h-3" />
                           </button>
                         )}
+                        <input
+                          ref={profileImageInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleProfileImageSelect}
+                          className="hidden"
+                        />
                       </div>
                       <div className="flex-1">
                         {isEditing ? (
@@ -690,24 +914,9 @@ export default function InfluencerDashboard() {
                           <h2 className="text-xl font-bold text-white mb-1">{userData.name}</h2>
                         )}
                         <p className="text-sm text-gray-400">Content Creator & Influencer</p>
-                        {/* Social icons */}
-                        <div className="flex gap-2 mt-2">
-                          {userData.social_accounts?.find((s: any) => s.platform_id === 1) && (
-                            <div className="w-7 h-7 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full flex items-center justify-center">
-                              <Instagram className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                          {userData.social_accounts?.find((s: any) => s.platform_id === 2) && (
-                            <div className="w-7 h-7 bg-red-600 rounded-full flex items-center justify-center">
-                              <Youtube className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                          {userData.social_accounts?.find((s: any) => s.platform_id === 3) && (
-                            <div className="w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center">
-                              <Video className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                        </div>
+                        {isEditing && profileImageFile && (
+                          <p className="text-xs text-primary mt-2">{profileImageFile.name}</p>
+                        )}
                       </div>
                     </div>
 
@@ -773,6 +982,43 @@ export default function InfluencerDashboard() {
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.city || 'Not provided'}</p>
                         )}
                       </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Gender</label>
+                        {isEditing ? (
+                          <select
+                            value={editForm.gender}
+                            onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary"
+                          >
+                            <option value="">Select gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                            <option value="prefer_not_to_say">Prefer not to say</option>
+                          </select>
+                        ) : (
+                          <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5 capitalize">
+                            {userData.gender ? String(userData.gender).replaceAll('_', ' ') : 'Not provided'}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Date of Birth</label>
+                        {isEditing ? (
+                          <Input
+                            value={editForm.date_of_birth}
+                            onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
+                            className="bg-gray-800 border-gray-700 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-90 [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:saturate-[8] [&::-webkit-calendar-picker-indicator]:hue-rotate-[345deg]"
+                            type="date"
+                          />
+                        ) : (
+                          <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">
+                            {userData.date_of_birth ? new Date(userData.date_of_birth).toLocaleDateString() : 'Not provided'}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Bio */}
@@ -790,12 +1036,45 @@ export default function InfluencerDashboard() {
                       )}
                     </div>
 
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-gray-400 mb-2">Categories</label>
+                      {isEditing ? (
+                        <div className="flex flex-wrap gap-2">
+                          {apiCategories.map((category) => (
+                            <button
+                              key={category.id}
+                              type="button"
+                              onClick={() => toggleCategory(category.id)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                selectedCategoryIds.includes(category.id)
+                                  ? 'bg-primary text-black border-primary'
+                                  : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-500'
+                              }`}
+                            >
+                              {category.name}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(userData.categories?.length > 0 ? userData.categories : []).map((cat: any, i: number) => (
+                            <span key={i} className="px-3 py-1 bg-primary/20 text-primary rounded-full text-xs font-medium">
+                              {cat.name || cat}
+                            </span>
+                          ))}
+                          {(!userData.categories || userData.categories.length === 0) && (
+                            <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">No categories selected</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {isEditing && (
                       <div className="flex gap-3 pt-4 border-t border-gray-800">
                         <button onClick={handleSaveProfile} className="flex-1 bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg transition-colors text-sm">
                           Save Changes
                         </button>
-                        <button onClick={() => { setIsEditing(false); setEditForm({ name: userData.name || '', phone: userData.phone || '', country: userData.country || '', city: userData.city || '', bio: userData.bio || '' }); }}
+                        <button onClick={resetEditState}
                           className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm">
                           Cancel
                         </button>
@@ -846,9 +1125,9 @@ export default function InfluencerDashboard() {
                         <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
                           <circle cx="18" cy="18" r="15.9" fill="none" stroke="#374151" strokeWidth="3" />
                           <circle cx="18" cy="18" r="15.9" fill="none" stroke="#a855f7" strokeWidth="3"
-                            strokeDasharray="72 28" strokeLinecap="round" />
+                            strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
                           <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
-                            strokeDasharray="28 72" strokeDashoffset="-72" strokeLinecap="round" />
+                            strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="text-xs text-gray-400 text-center">Gender</span>
@@ -856,11 +1135,11 @@ export default function InfluencerDashboard() {
                       </div>
                     </div>
                     <div className="flex justify-center gap-4 text-sm mb-4">
-                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-purple-500"></div><span className="text-white">72% Female</span></div>
-                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500"></div><span className="text-white">28% Male</span></div>
+                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-purple-500"></div><span className="text-white">{femalePct}% Female</span></div>
+                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500"></div><span className="text-white">{malePct}% Male</span></div>
                     </div>
                     <h4 className="font-medium text-white text-sm mb-3">Top Locations</h4>
-                    {[{ country: 'India', pct: 65 }, { country: 'United States', pct: 15 }, { country: 'United Kingdom', pct: 10 }, { country: 'Other', pct: 10 }].map((loc) => (
+                    {profileLocations.map((loc) => (
                       <div key={loc.country} className="mb-2">
                         <div className="flex justify-between text-xs text-gray-400 mb-1">
                           <span>{loc.country}</span><span>{loc.pct}%</span>
@@ -872,19 +1151,6 @@ export default function InfluencerDashboard() {
                     ))}
                   </div>
 
-                  {/* Categories */}
-                  {userData.categories?.length > 0 && (
-                    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                      <h3 className="font-bold text-white mb-3">Categories</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {userData.categories.map((cat: any, i: number) => (
-                          <span key={i} className="px-3 py-1 bg-primary/20 text-primary rounded-full text-xs font-medium">
-                            {cat.name || cat}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -991,17 +1257,17 @@ export default function InfluencerDashboard() {
                       <div className="w-16 h-16 relative flex-shrink-0">
                         <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
                           <circle cx="18" cy="18" r="15.9" fill="none" stroke="#374151" strokeWidth="4" />
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#a855f7" strokeWidth="4" strokeDasharray="72 28" />
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="4" strokeDasharray="28 72" strokeDashoffset="-72" />
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#a855f7" strokeWidth="4" strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} />
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="4" strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} />
                         </svg>
                       </div>
                       <div className="text-sm">
-                        <div className="flex items-center gap-1 text-white mb-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div>72% Female</div>
-                        <div className="flex items-center gap-1 text-white"><div className="w-2 h-2 rounded-full bg-blue-500"></div>28% Male</div>
+                        <div className="flex items-center gap-1 text-white mb-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div>{femalePct}% Female</div>
+                        <div className="flex items-center gap-1 text-white"><div className="w-2 h-2 rounded-full bg-blue-500"></div>{malePct}% Male</div>
                       </div>
                     </div>
                     <h4 className="text-xs font-medium text-gray-400 mb-2">Top Locations</h4>
-                    {[{ country: 'India', pct: 65 }, { country: 'United States', pct: 15 }, { country: 'UK', pct: 10 }].map((loc) => (
+                    {profileLocations.slice(0, 3).map((loc) => (
                       <div key={loc.country} className="flex items-center gap-2 mb-1.5">
                         <span className="text-xs text-gray-400 w-24">{loc.country}</span>
                         <div className="flex-1 h-1.5 bg-gray-700 rounded-full">
@@ -1186,28 +1452,7 @@ export default function InfluencerDashboard() {
 
           {/* ── ANALYTICS TAB ── */}
           {activeTab === 'analytics' && (
-            <div>
-              <h1 className="text-2xl font-bold text-white mb-6">Analytics</h1>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                {[
-                  { label: 'Total Followers', value: '403K', change: '+8.2%' },
-                  { label: 'Avg Engagement', value: '5.8%', change: '+1.2%' },
-                  { label: 'Total Reach', value: '485K', change: '+18.7%' },
-                  { label: 'Profile Views', value: '12.3K', change: '+5.4%' },
-                ].map((stat) => (
-                  <div key={stat.label} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                    <p className="text-gray-400 text-xs mb-1">{stat.label}</p>
-                    <p className="text-2xl font-bold text-white">{stat.value}</p>
-                    <p className="text-green-400 text-xs">{stat.change}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 text-center">
-                <BarChart3 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-white font-medium mb-2">Detailed Analytics Coming Soon</p>
-                <p className="text-gray-400 text-sm">Connect your social accounts to see detailed analytics</p>
-              </div>
-            </div>
+            <InfluencerAnalytics />
           )}
 
           {/* ── CONTENT TAB ── */}
@@ -1227,29 +1472,6 @@ export default function InfluencerDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Profile Info */}
-                <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-                  <h3 className="font-bold text-white mb-4">Profile Information</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Full Name</label>
-                      <Input defaultValue={userData.name} className="bg-gray-800 border-gray-700 text-white text-sm" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Email Address</label>
-                      <Input defaultValue={userData.email} className="bg-gray-800 border-gray-700 text-white text-sm" type="email" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">Bio</label>
-                      <textarea rows={3} defaultValue={userData.bio || ''}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none" />
-                    </div>
-                    <button onClick={handleSaveProfile} className="bg-primary hover:bg-secondary text-black font-semibold px-6 py-2 rounded-lg text-sm transition-colors">
-                      Save Changes
-                    </button>
-                  </div>
-                </div>
-
                 {/* Account Settings */}
                 <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
                   <h3 className="font-bold text-white mb-4">Account Settings</h3>
@@ -1275,7 +1497,10 @@ export default function InfluencerDashboard() {
                   {/* Security */}
                   <h3 className="font-bold text-white mb-3">Security</h3>
                   <div className="space-y-2">
-                    <button className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+                    <button
+                      onClick={() => setShowChangePasswordModal(true)}
+                      className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    >
                       <span className="text-white text-sm">Change Password</span>
                       <ChevronDown className="w-4 h-4 text-gray-400 -rotate-90" />
                     </button>
@@ -1287,7 +1512,7 @@ export default function InfluencerDashboard() {
                 </div>
 
                 {/* Danger Zone */}
-                <div className="lg:col-span-2 bg-gray-900 rounded-xl p-6 border border-red-900">
+                <div className="bg-gray-900 rounded-xl p-6 border border-red-900">
                   <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2">⚠️ Danger Zone</h3>
                   <p className="text-gray-400 text-sm mb-4">Permanent actions cannot be undone.</p>
                   <button className="bg-red-950 border border-red-700 text-red-400 hover:bg-red-900 font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors w-full">
@@ -1295,6 +1520,64 @@ export default function InfluencerDashboard() {
                   </button>
                 </div>
               </div>
+
+              {showChangePasswordModal && (
+                <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
+                    <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                      <h2 className="text-xl font-bold text-white">Change Password</h2>
+                      <button
+                        onClick={() => {
+                          setShowChangePasswordModal(false);
+                          setPasswordForm({ password: '', confirmPassword: '' });
+                        }}
+                        className="p-2 hover:bg-gray-800 rounded-lg"
+                      >
+                        <X className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">New Password</label>
+                        <Input
+                          value={passwordForm.password}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
+                          type="password"
+                          className="bg-gray-800 border-gray-700 text-white"
+                          placeholder="Enter new password"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Confirm Password</label>
+                        <Input
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                          type="password"
+                          className="bg-gray-800 border-gray-700 text-white"
+                          placeholder="Confirm new password"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 p-6 border-t border-gray-800">
+                      <button
+                        onClick={handleChangePassword}
+                        className="flex-1 bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg transition-colors"
+                      >
+                        Update Password
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowChangePasswordModal(false);
+                          setPasswordForm({ password: '', confirmPassword: '' });
+                        }}
+                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

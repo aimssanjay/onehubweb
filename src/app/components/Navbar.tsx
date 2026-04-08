@@ -13,17 +13,34 @@ export function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const brandToken = localStorage.getItem('brand_token');
-    const brandData = localStorage.getItem('brand_user');
-    if (brandToken && brandData) {
-      try { setBrandUser(JSON.parse(brandData)); } catch {}
-    }
+    const syncUsers = () => {
+      const brandToken = localStorage.getItem('brand_token');
+      const brandData = localStorage.getItem('brand_user');
+      if (brandToken && brandData) {
+        try { setBrandUser(JSON.parse(brandData)); } catch {}
+      } else {
+        setBrandUser(null);
+      }
 
-    const influencerToken = localStorage.getItem('influencer_token');
-    const influencerData = localStorage.getItem('influencer_user');
-    if (influencerToken && influencerData) {
-      try { setInfluencerUser(JSON.parse(influencerData)); } catch {}
-    }
+      const influencerToken = localStorage.getItem('influencer_token');
+      const influencerData = localStorage.getItem('influencer_user');
+      if (influencerToken && influencerData) {
+        try { setInfluencerUser(JSON.parse(influencerData)); } catch {}
+      } else {
+        setInfluencerUser(null);
+      }
+    };
+
+    syncUsers();
+    window.addEventListener('storage', syncUsers);
+    window.addEventListener('focus', syncUsers);
+    window.addEventListener('auth-state-changed', syncUsers as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', syncUsers);
+      window.removeEventListener('focus', syncUsers);
+      window.removeEventListener('auth-state-changed', syncUsers as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -100,14 +117,27 @@ export function Navbar() {
           <div className="flex items-center gap-3">
             {loggedInUser ? (
               // ✅ LOGGED IN — avatar + dropdown
-              <div className="relative" ref={dropdownRef}>
+              <div
+                className="relative"
+                ref={dropdownRef}
+                onMouseEnter={() => setDropdownOpen(true)}
+                onMouseLeave={() => setDropdownOpen(false)}
+              >
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity focus:outline-none"
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black font-bold text-sm">
-                    {(loggedInUser?.name || 'U')[0].toUpperCase()}
-                  </div>
+                  {loggedInUser?.profile_pic ? (
+                    <img
+                      src={loggedInUser.profile_pic}
+                      alt={loggedInUser?.name || 'User'}
+                      className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black font-bold text-sm">
+                      {(loggedInUser?.name || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
                   <span className="font-medium text-gray-800 hidden sm:block">
                     {loggedInUser?.name || 'User'}
                   </span>
