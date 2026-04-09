@@ -130,7 +130,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                     {platform}
                     <button
                       onClick={(e) => removePlatform(platform, e)}
-                      className="hover:opacity-70"
+                      className="hover:opacity-70 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -154,7 +154,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                 <button
                   key={platform.id}
                   onClick={() => handlePlatformToggle(platform.name)}
-                  className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors flex items-center justify-between"
+                  className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors flex items-center justify-between cursor-pointer"
                   style={{
                     color: selectedPlatforms.includes(platform.name) ? '#D4AF37' : '#1a1a1a',
                     backgroundColor: selectedPlatforms.includes(platform.name) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
@@ -209,7 +209,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                     {category}
                     <button
                       onClick={(e) => removeCategory(category, e)}
-                      className="hover:opacity-70"
+                      className="hover:opacity-70 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -239,7 +239,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                   <button
                     key={category.id}
                     onClick={() => handleCategoryToggle(category.name)}
-                    className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)]"
+                    className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)] cursor-pointer"
                     style={{
                       backgroundColor: selectedCategories.includes(category.name) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
                       borderColor: selectedCategories.includes(category.name) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',
@@ -282,7 +282,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
         <div className="flex-1 relative" ref={platformRef}>
           <button
             onClick={() => setShowPlatformDropdown(!showPlatformDropdown)}
-            className="w-full min-h-[40px] flex flex-col justify-start px-[10px] text-left focus:outline-none group"
+            className="w-full min-h-[40px] flex flex-col justify-start px-[10px] text-left focus:outline-none group cursor-pointer"
           >
             <div className="flex items-center justify-between mb-1">
               <span 
@@ -321,7 +321,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                     {platform}
                     <button
                       onClick={(e) => removePlatform(platform, e)}
-                      className="hover:opacity-70"
+                      className="hover:opacity-70 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -345,7 +345,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                 <button
                   key={platform.id}
                   onClick={() => handlePlatformToggle(platform.name)}
-                  className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors"
+                  className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors cursor-pointer"
                   style={{
                     color: selectedPlatforms.includes(platform.name) ? '#D4AF37' : '#1a1a1a',
                     backgroundColor: selectedPlatforms.includes(platform.name) ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
@@ -369,7 +369,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
         <div className="flex-1 relative" ref={categoryRef}>
           <button
             onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-            className="w-full min-h-[40px] flex flex-col justify-start px-[10px] text-left focus:outline-none group"
+            className="w-full min-h-[40px] flex flex-col justify-start px-[10px] text-left focus:outline-none group cursor-pointer"
           >
             <div className="flex items-center justify-between mb-1">
               <span 
@@ -408,7 +408,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                     {category}
                     <button
                       onClick={(e) => removeCategory(category, e)}
-                      className="hover:opacity-70"
+                      className="hover:opacity-70 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -438,7 +438,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                   <button
                     key={category.id}
                     onClick={() => handleCategoryToggle(category.name)}
-                    className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)]"
+                    className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)] cursor-pointer"
                     style={{
                       backgroundColor: selectedCategories.includes(category.name) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
                       borderColor: selectedCategories.includes(category.name) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',

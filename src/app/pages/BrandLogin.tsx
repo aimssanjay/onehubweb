@@ -60,14 +60,6 @@ export function BrandLogin() {
       {/* Left Side - Login Form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
-          {/* Logo */}
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold">OneHub</span>
-          </div>
-
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-black mb-3">Welcome Back</h1>
@@ -106,19 +98,15 @@ export function BrandLogin() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-                <span className="text-sm text-gray-600">Remember me</span>
-              </label>
-              <Link to="/forgot-password?type=brand" className="text-sm text-primary hover:text-secondary font-medium">
+            <div className="flex items-center justify-end">
+              <Link to="/forgot-password?type=brand" className="text-sm text-primary hover:text-secondary font-medium cursor-pointer">
                 Forgot password?
               </Link>
             </div>
@@ -126,7 +114,7 @@ export function BrandLogin() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-primary hover:bg-secondary text-black font-semibold text-lg"
+              className="w-full h-12 bg-primary hover:bg-secondary text-black font-semibold text-lg cursor-pointer"
             >
               {isLoading ? 'Signing in...' : (<>Sign In <ArrowRight className="w-5 h-5 ml-2" /></>)}
             </Button>
@@ -144,11 +132,11 @@ export function BrandLogin() {
           <div className="text-center space-y-3">
             <p className="text-gray-600">
               Don't have an account?{' '}
-              <Link to="/signup" className="text-primary hover:text-secondary font-semibold">Sign up as a Brand</Link>
+              <Link to="/signup" className="text-primary hover:text-secondary font-semibold cursor-pointer">Sign up as a Brand</Link>
             </p>
             <p className="text-gray-600">
               Are you a creator?{' '}
-              <Link to="/influencer/login" className="text-primary hover:text-secondary font-semibold">Creator Login</Link>
+              <Link to="/influencer/login" className="text-primary hover:text-secondary font-semibold cursor-pointer">Creator Login</Link>
             </p>
           </div>
         </div>

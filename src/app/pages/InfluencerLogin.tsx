@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Logo } from '../components/Logo';
-import { Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 
 export default function InfluencerLogin() {
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -90,29 +90,33 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <Input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pl-10"
+                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pl-10 pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                <input type="checkbox" className="rounded border-gray-700 bg-gray-900" />
-                Remember me
-              </label>
-              <a href="/forgot-password?type=influencer" className="text-sm text-primary hover:underline">
+            <div className="flex items-center justify-end">
+              <a href="/forgot-password?type=influencer" className="text-sm text-primary hover:underline cursor-pointer">
                 Forgot password?
               </a>
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-secondary text-white"
+              className="w-full bg-primary hover:bg-secondary text-white cursor-pointer"
             >
               Sign In
             </Button>
@@ -166,7 +170,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
             <p className="text-center text-sm text-gray-400">
               Don't have an account?{' '}
-              <a href="/signup-influencer" className="text-primary hover:underline font-medium">
+              <a href="/influencer-signup" className="text-primary hover:underline font-medium cursor-pointer">
                 Sign up as influencer
               </a>
             </p>

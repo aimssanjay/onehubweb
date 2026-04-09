@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building, Mail, Lock, User, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { Building, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -30,6 +30,7 @@ export function BrandSignup() {
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const industries = [
     'Fashion & Apparel',
@@ -67,14 +68,7 @@ export function BrandSignup() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-md mx-auto">
-
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-semibold">InfluenceHub</span>
-          </div>
           <h1 className="text-3xl font-bold mb-2">Create Your Brand Account</h1>
           <p className="text-muted-foreground">Start collaborating with influencers today</p>
         </div>
@@ -117,12 +111,20 @@ export function BrandSignup() {
               <div className="relative">
                 <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <Input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 
@@ -147,12 +149,12 @@ export function BrandSignup() {
                 value={formData.industry}
                 onValueChange={(value) => setFormData({ ...formData, industry: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="cursor-pointer">
                   <SelectValue placeholder="Select your industry" />
                 </SelectTrigger>
                 <SelectContent>
                   {industries.map((item) => (
-                    <SelectItem key={item} value={item}>
+                    <SelectItem key={item} value={item} className="cursor-pointer">
                       {item}
                     </SelectItem>
                   ))}
@@ -160,7 +162,7 @@ export function BrandSignup() {
               </Select>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full">
+            <Button type="submit" disabled={loading} className="w-full cursor-pointer">
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
@@ -187,7 +189,7 @@ export function BrandSignup() {
 
           <p className="text-center text-sm">
             Already have an account?{" "}
-            <Link to="/brand/login" className="text-blue-600">
+            <Link to="/brand/login" className="text-blue-600 hover:underline cursor-pointer">
               Login
             </Link>
           </p>

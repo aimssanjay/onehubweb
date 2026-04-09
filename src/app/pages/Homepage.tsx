@@ -104,7 +104,7 @@ export function Homepage() {
             <Button
               variant="ghost"
               onClick={() => onNavigate('browse')}
-              className="text-foreground hover:text-primary hidden md:flex"
+              className="text-foreground hover:text-primary hidden md:flex cursor-pointer"
             >
               View All
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -269,7 +269,7 @@ export function Homepage() {
             <Button
               variant="ghost"
               onClick={() => onNavigate('browse', { platform: 'youtube' })}
-              className="text-foreground hover:text-primary hidden md:flex"
+              className="text-foreground hover:text-primary hidden md:flex cursor-pointer"
             >
               View All
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -337,7 +337,7 @@ export function Homepage() {
             <Button
               size="lg"
               onClick={() => onNavigate('signup-influencer')}
-              className="bg-primary hover:bg-[#c19a2e] text-black px-10"
+              className="bg-primary hover:bg-[#c19a2e] text-black px-10 cursor-pointer"
             >
               Join as a Creator
               <ArrowRight className="w-5 h-5 ml-2" />
@@ -357,7 +357,7 @@ export function Homepage() {
             <Button
               variant="ghost"
               onClick={() => onNavigate('browse', { platform: 'tiktok' })}
-              className="text-foreground hover:text-primary hidden md:flex"
+              className="text-foreground hover:text-primary hidden md:flex cursor-pointer"
             >
               View All
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -439,7 +439,7 @@ export function Homepage() {
                 <Button
                   size="lg"
                   onClick={() => onNavigate('browse')}
-                  className="bg-white hover:bg-gray-100 text-black px-6 sm:px-8 text-sm sm:text-base h-11 sm:h-12 font-semibold rounded-lg w-full sm:w-auto mb-3 md:mb-0"
+                  className="bg-white hover:bg-gray-100 text-black px-6 sm:px-8 text-sm sm:text-base h-11 sm:h-12 font-semibold rounded-lg w-full sm:w-auto mb-3 md:mb-0 cursor-pointer"
                 >
                   Search Influencers
                 </Button>

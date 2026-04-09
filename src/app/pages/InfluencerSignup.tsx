@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Checkbox } from '@/app/components/ui/checkbox';
-import { Instagram, Youtube, Video, Check, ArrowRight, ArrowLeft } from 'lucide-react';
-import { Logo } from '../components/Logo';
+import { Instagram, Youtube, Video, Check, ArrowRight, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
@@ -34,6 +33,8 @@ export function InfluencerSignup() {
 
   const [step, setStep] = useState(1);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [socialAccounts, setSocialAccounts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -237,23 +238,43 @@ export function InfluencerSignup() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-white mb-2">Password</label>
-                <Input
-                  type="password"
-                  placeholder="Create a strong password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Create a strong password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-white mb-2">Confirm Password</label>
-                <Input
-                  type="password"
-                  placeholder="Re-enter your password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
-                />
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="Re-enter your password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
               <Button
                 onClick={handleRegister}
