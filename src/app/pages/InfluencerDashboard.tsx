@@ -24,7 +24,7 @@ type SharedAnalyticsData = {
   youtube: { followers: string; avgViews: string; engagement: string };
   audienceLocation: Array<{ country: string; percentage: string }>;
   audienceAge: Array<{ range: string; percentage: string }>;
-  audienceGender: { female: string; male: string };
+  audienceGender: { female: string; male: string; other?: string };
 };
 
 // Country list
@@ -113,7 +113,8 @@ export default function InfluencerDashboard() {
   const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', password: '', confirmPassword: '' });
+  const [isPasswordUpdating, setIsPasswordUpdating] = useState(false);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
 
   // Edit form state
@@ -123,7 +124,24 @@ export default function InfluencerDashboard() {
 
   const normalizeDateInput = (value: string) => {
     if (!value) return '';
-    return value.includes('T') ? value.split('T')[0] : value;
+    const raw = value.includes('T') ? value.split('T')[0] : value;
+    const trimmed = raw.trim();
+
+    // Convert DD-MM-YYYY to YYYY-MM-DD when needed
+    const ddMmYyyyMatch = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (ddMmYyyyMatch) {
+      const [, dd, mm, yyyy] = ddMmYyyyMatch;
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return trimmed;
+  };
+
+  const parseMaybeNumber = (value: string) => {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) return undefined;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : undefined;
   };
 
   const applyProfileData = (data: any) => {
@@ -136,7 +154,7 @@ export default function InfluencerDashboard() {
       city: data.city || '',
       bio: data.bio || '',
       gender: data.gender || '',
-      date_of_birth: normalizeDateInput(data.date_of_birth || ''),
+      date_of_birth: normalizeDateInput(data.date_of_birth || data.dob || ''),
     });
     setSelectedCategoryIds(
       (data.categories || [])
@@ -258,10 +276,40 @@ export default function InfluencerDashboard() {
         }
       }
 
+      const phoneValue = parseMaybeNumber(editForm.phone);
+      const countryValue = parseMaybeNumber(editForm.country);
+      const cityValue = parseMaybeNumber(editForm.city);
+
+      const profilePayload: Record<string, unknown> = {
+        name: editForm.name.trim(),
+        bio: editForm.bio.trim(),
+        gender: editForm.gender || undefined,
+        dob: editForm.date_of_birth || undefined,
+        category_ids: selectedCategoryIds,
+      };
+
+      if (phoneValue !== undefined) {
+        profilePayload.phone = phoneValue;
+      } else if (editForm.phone.trim()) {
+        profilePayload.phone = editForm.phone.trim();
+      }
+
+      if (countryValue !== undefined) {
+        profilePayload.country = countryValue;
+      } else if (editForm.country.trim()) {
+        profilePayload.country = editForm.country.trim();
+      }
+
+      if (cityValue !== undefined) {
+        profilePayload.city = cityValue;
+      } else if (editForm.city.trim()) {
+        profilePayload.city = editForm.city.trim();
+      }
+
       const profileResponse = await fetch(`${API_BASE_URL}/influencers/update-profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(profilePayload),
       });
 
       const profileResult = await profileResponse.json();
@@ -269,22 +317,10 @@ export default function InfluencerDashboard() {
         toast.error(profileResult.message || 'Failed to update profile');
         return;
       }
-
-      const categoriesResponse = await fetch(`${API_BASE_URL}/influencers/update-categories`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ category_ids: selectedCategoryIds }),
-      });
-      const categoriesResult = await categoriesResponse.json();
-
-      if (categoriesResult.success || categoriesResponse.ok) {
-        await refreshProfile(token);
-        setProfileImageFile(null);
-        setIsEditing(false);
-        toast.success('Profile updated successfully');
-      } else {
-        toast.error(categoriesResult.message || 'Failed to update categories');
-      }
+      await refreshProfile(token);
+      setProfileImageFile(null);
+      setIsEditing(false);
+      toast.success('Profile updated successfully');
     } catch (error) {
       toast.error('Server error');
     }
@@ -315,9 +351,15 @@ export default function InfluencerDashboard() {
     reader.readAsDataURL(file);
   };
 
-  const handleChangePassword = () => {
-    if (!passwordForm.password || !passwordForm.confirmPassword) {
-      toast.error('Please fill both password fields');
+  const handleChangePassword = async () => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    if (!passwordForm.currentPassword || !passwordForm.password || !passwordForm.confirmPassword) {
+      toast.error('Please fill all password fields');
       return;
     }
     if (passwordForm.password !== passwordForm.confirmPassword) {
@@ -329,9 +371,33 @@ export default function InfluencerDashboard() {
       return;
     }
 
-    toast.success('Password changed successfully');
-    setShowChangePasswordModal(false);
-    setPasswordForm({ password: '', confirmPassword: '' });
+    try {
+      setIsPasswordUpdating(true);
+      const response = await fetch(`${API_BASE_URL}/users/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: passwordForm.currentPassword,
+          new_password: passwordForm.password,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success || response.ok) {
+        toast.success(result.message || 'Password changed successfully');
+        setShowChangePasswordModal(false);
+        setPasswordForm({ currentPassword: '', password: '', confirmPassword: '' });
+      } else {
+        toast.error(result.message || 'Failed to change password');
+      }
+    } catch {
+      toast.error('Server error');
+    } finally {
+      setIsPasswordUpdating(false);
+    }
   };
 
   const filteredCountries = COUNTRIES.filter(c =>
@@ -995,7 +1061,6 @@ export default function InfluencerDashboard() {
                             <option value="male">Male</option>
                             <option value="female">Female</option>
                             <option value="other">Other</option>
-                            <option value="prefer_not_to_say">Prefer not to say</option>
                           </select>
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5 capitalize">
@@ -1008,14 +1073,14 @@ export default function InfluencerDashboard() {
                         <label className="block text-xs font-medium text-gray-400 mb-1.5">Date of Birth</label>
                         {isEditing ? (
                           <Input
-                            value={editForm.date_of_birth}
+                            value={normalizeDateInput(editForm.date_of_birth)}
                             onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
                             className="bg-gray-800 border-gray-700 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-90 [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:saturate-[8] [&::-webkit-calendar-picker-indicator]:hue-rotate-[345deg]"
                             type="date"
                           />
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">
-                            {userData.date_of_birth ? new Date(userData.date_of_birth).toLocaleDateString() : 'Not provided'}
+                            {normalizeDateInput(userData.date_of_birth || userData.dob || '') || 'Not provided'}
                           </p>
                         )}
                       </div>
@@ -1529,7 +1594,7 @@ export default function InfluencerDashboard() {
                       <button
                         onClick={() => {
                           setShowChangePasswordModal(false);
-                          setPasswordForm({ password: '', confirmPassword: '' });
+                          setPasswordForm({ currentPassword: '', password: '', confirmPassword: '' });
                         }}
                         className="p-2 hover:bg-gray-800 rounded-lg"
                       >
@@ -1537,6 +1602,16 @@ export default function InfluencerDashboard() {
                       </button>
                     </div>
                     <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Current Password</label>
+                        <Input
+                          value={passwordForm.currentPassword}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                          type="password"
+                          className="bg-gray-800 border-gray-700 text-white"
+                          placeholder="Enter current password"
+                        />
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-400 mb-2">New Password</label>
                         <Input
@@ -1561,14 +1636,15 @@ export default function InfluencerDashboard() {
                     <div className="flex gap-3 p-6 border-t border-gray-800">
                       <button
                         onClick={handleChangePassword}
+                        disabled={isPasswordUpdating}
                         className="flex-1 bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg transition-colors"
                       >
-                        Update Password
+                        {isPasswordUpdating ? 'Updating...' : 'Update Password'}
                       </button>
                       <button
                         onClick={() => {
                           setShowChangePasswordModal(false);
-                          setPasswordForm({ password: '', confirmPassword: '' });
+                          setPasswordForm({ currentPassword: '', password: '', confirmPassword: '' });
                         }}
                         className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 rounded-lg transition-colors"
                       >

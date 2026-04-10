@@ -3,6 +3,8 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Instagram, Music, Youtube, Edit, Save, Plus, Trash2 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { toast } from 'sonner';
+import { API_BASE_URL } from '../../services/api';
 
 type PlatformType = 'instagram' | 'tiktok' | 'youtube';
 
@@ -31,6 +33,7 @@ interface AnalyticsState {
   audienceGender: {
     female: string;
     male: string;
+    other: string;
   };
 }
 
@@ -68,6 +71,7 @@ const DEFAULT_ANALYTICS_DATA: AnalyticsState = {
   audienceGender: {
     female: '70',
     male: '30',
+    other: '0',
   },
 };
 
@@ -134,6 +138,7 @@ export function InfluencerAnalytics() {
   const [activePlatform, setActivePlatform] = useState<PlatformType>('instagram');
   const [isEditingMetrics, setIsEditingMetrics] = useState(false);
   const [isEditingDemographics, setIsEditingDemographics] = useState(false);
+  const [isSavingDemographics, setIsSavingDemographics] = useState(false);
 
   const [analyticsData, setAnalyticsData] = useState<AnalyticsState>(DEFAULT_ANALYTICS_DATA);
 
@@ -145,7 +150,19 @@ export function InfluencerAnalytics() {
     }
 
     try {
-      setAnalyticsData(JSON.parse(savedAnalytics));
+      const parsed = JSON.parse(savedAnalytics);
+      setAnalyticsData({
+        instagram: parsed.instagram || DEFAULT_ANALYTICS_DATA.instagram,
+        tiktok: parsed.tiktok || DEFAULT_ANALYTICS_DATA.tiktok,
+        youtube: parsed.youtube || DEFAULT_ANALYTICS_DATA.youtube,
+        audienceLocation: parsed.audienceLocation || DEFAULT_ANALYTICS_DATA.audienceLocation,
+        audienceAge: parsed.audienceAge || DEFAULT_ANALYTICS_DATA.audienceAge,
+        audienceGender: {
+          female: parsed.audienceGender?.female ?? DEFAULT_ANALYTICS_DATA.audienceGender.female,
+          male: parsed.audienceGender?.male ?? DEFAULT_ANALYTICS_DATA.audienceGender.male,
+          other: parsed.audienceGender?.other ?? DEFAULT_ANALYTICS_DATA.audienceGender.other,
+        },
+      });
     } catch {
       localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(DEFAULT_ANALYTICS_DATA));
       setAnalyticsData(DEFAULT_ANALYTICS_DATA);
@@ -155,13 +172,105 @@ export function InfluencerAnalytics() {
   const handleSaveMetrics = () => {
     localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
     window.dispatchEvent(new Event('influencer-analytics-updated'));
+    toast.success('Platform metrics updated');
     setIsEditingMetrics(false);
   };
 
-  const handleSaveDemographics = () => {
-    localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
-    window.dispatchEvent(new Event('influencer-analytics-updated'));
-    setIsEditingDemographics(false);
+  const handleSaveDemographics = async () => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    const toPercentage = (value: string) => {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return 0;
+      return Math.max(0, Math.min(100, parsed));
+    };
+
+    const genderPayload = {
+      male: toPercentage(analyticsData.audienceGender.male),
+      female: toPercentage(analyticsData.audienceGender.female),
+      other: toPercentage(analyticsData.audienceGender.other),
+    };
+
+    const audienceAgePayload = {
+      audience_age: analyticsData.audienceAge.map((age) => ({
+        age_range: age.range,
+        percentage: toPercentage(age.percentage),
+      })),
+    };
+
+    const audienceLocationsPayload = {
+      audience_locations: analyticsData.audienceLocation
+        .filter((location) => location.country.trim())
+        .map((location) => ({
+          country: location.country.trim(),
+          percentage: toPercentage(location.percentage),
+        })),
+    };
+
+    try {
+      setIsSavingDemographics(true);
+
+      const [genderResponse, ageResponse, locationResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/influencers/update-audience-gender`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(genderPayload),
+        }),
+        fetch(`${API_BASE_URL}/influencers/update-audience-age`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(audienceAgePayload),
+        }),
+        fetch(`${API_BASE_URL}/influencers/update-audience-locations`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(audienceLocationsPayload),
+        }),
+      ]);
+
+      const [genderResult, ageResult, locationResult] = await Promise.all([
+        genderResponse.json(),
+        ageResponse.json(),
+        locationResponse.json(),
+      ]);
+
+      if (!(genderResponse.ok || genderResult.success)) {
+        toast.error(genderResult.message || 'Failed to update audience gender');
+        return;
+      }
+
+      if (!(ageResponse.ok || ageResult.success)) {
+        toast.error(ageResult.message || 'Failed to update audience age');
+        return;
+      }
+
+      if (!(locationResponse.ok || locationResult.success)) {
+        toast.error(locationResult.message || 'Failed to update audience locations');
+        return;
+      }
+
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
+      window.dispatchEvent(new Event('influencer-analytics-updated'));
+      setIsEditingDemographics(false);
+      toast.success('Audience demographics updated successfully');
+    } catch {
+      toast.error('Server error while saving demographics');
+    } finally {
+      setIsSavingDemographics(false);
+    }
   };
 
   const updateMetric = (platform: PlatformType, field: keyof PlatformMetrics, value: string) => {
@@ -204,7 +313,7 @@ export function InfluencerAnalytics() {
     });
   };
 
-  const updateGender = (field: 'female' | 'male', value: string) => {
+  const updateGender = (field: 'female' | 'male' | 'other', value: string) => {
     setAnalyticsData(prev => ({
       ...prev,
       audienceGender: {
@@ -512,6 +621,19 @@ export function InfluencerAnalytics() {
                     <span className="text-gray-400">%</span>
                   </div>
                 </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Other</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={analyticsData.audienceGender.other}
+                      onChange={(e) => updateGender('other', e.target.value)}
+                      className="bg-gray-800 border-gray-700 text-white text-sm md:text-base"
+                      placeholder="0"
+                      type="number"
+                    />
+                    <span className="text-gray-400">%</span>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-8">
@@ -562,10 +684,11 @@ export function InfluencerAnalytics() {
           <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mt-6 md:mt-8 pt-6 md:pt-8 border-t border-gray-800">
             <Button
               onClick={handleSaveDemographics}
+              disabled={isSavingDemographics}
               className="bg-primary hover:bg-secondary text-black font-medium text-sm md:text-base"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save Demographics
+              {isSavingDemographics ? 'Saving...' : 'Save Demographics'}
             </Button>
             <Button
               onClick={() => setIsEditingDemographics(false)}

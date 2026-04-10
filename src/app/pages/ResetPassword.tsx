@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle, Sparkles, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { API_BASE_URL } from '../../services/api';
+import { toast } from 'sonner';
 
 export function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -60,13 +62,35 @@ export function ResetPassword() {
       return;
     }
 
+    if (!token) {
+      toast.error('Invalid or expired reset link');
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate API call to reset password
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          current_password: token,
+          new_password: password,
+        }),
+      });
+
+      const data = await response.json();
+      if (!(data.success || response.ok)) {
+        toast.error(data.message || 'Failed to reset password');
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(false);
       setIsSuccess(true);
-      
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
         if (isBrand) {
@@ -75,7 +99,10 @@ export function ResetPassword() {
           navigate('/influencer/login');
         }
       }, 2000);
-    }, 1500);
+    } catch {
+      setIsLoading(false);
+      toast.error('Server error');
+    }
   };
 
   const handleBackToLogin = () => {
@@ -129,7 +156,7 @@ export function ResetPassword() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -196,7 +223,7 @@ export function ResetPassword() {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -220,7 +247,7 @@ export function ResetPassword() {
                   <button
                     type="button"
                     onClick={handleBackToLogin}
-                    className="text-sm text-gray-600 hover:text-gray-900"
+                    className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
                   >
                     Back to login
                   </button>
