@@ -58,11 +58,17 @@ const COUNTRIES = [
 ];
 
 // Mock data
-const mockCampaigns = [
-  { id: '1', brand: 'Nike', logo: 'N', budget: '$10,000', category: 'Fitness', platform: 'Instagram', status: 'available', description: 'Post a reel showcasing Nike shoes', matchCategory: 'Fashion' },
-  { id: '2', brand: 'Lakme', logo: 'L', budget: '$15,000', category: 'Beauty', platform: 'YouTube', status: 'applied', description: 'Beauty tutorial featuring Lakme products', matchCategory: 'Beauty' },
-  { id: '3', brand: 'Mamaearth', logo: 'M', budget: '$8,000', category: 'Skincare', platform: 'Instagram', status: 'ongoing', description: 'Skincare routine challenge', matchCategory: 'Beauty' },
-];
+const mockCampaigns: Array<{
+  id: string;
+  brand: string;
+  logo: string;
+  budget: string;
+  category: string;
+  platform: string;
+  status: 'available' | 'applied' | 'ongoing' | 'completed';
+  description: string;
+  matchCategory: string;
+}> = [];
 
 const mockMessages = [
   { id: '1', brand: 'Nike', brandInitial: 'N', brandColor: 'bg-black', lastMessage: 'Sounds great! Looking forward to it!', time: 'Now', unread: 1, online: true,
@@ -565,7 +571,7 @@ export default function InfluencerDashboard() {
     try {
       setIsPasswordUpdating(true);
       const response = await fetch(`${API_BASE_URL}/users/change-password`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -667,6 +673,21 @@ export default function InfluencerDashboard() {
       color: 'from-amber-500 to-yellow-500',
     },
   ];
+  const parseEngagementValue = (value: string | number) => {
+    const raw = String(value ?? '').trim().replace('%', '');
+    if (!raw) return 0;
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+  };
+  const engagementValues = [
+    parseEngagementValue(analyticsData.instagram.engagement),
+    parseEngagementValue(analyticsData.youtube.engagement),
+    parseEngagementValue(analyticsData.tiktok.engagement),
+    parseEngagementValue(analyticsData.others.engagement),
+  ].filter((value) => value > 0);
+  const overviewEngagementRate = engagementValues.length
+    ? `${(engagementValues.reduce((sum, value) => sum + value, 0) / engagementValues.length).toFixed(2)}%`
+    : '0%';
 
   if (loading) {
     return (
@@ -687,8 +708,8 @@ export default function InfluencerDashboard() {
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'campaigns', label: 'Campaigns', icon: Briefcase },
     { id: 'earnings', label: 'Earnings', icon: DollarSign },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: 3 },
-    { id: 'notifications', label: 'Notifications', icon: Bell, badge: 7 },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -728,11 +749,6 @@ export default function InfluencerDashboard() {
                     }`}>
                     <Icon className="w-5 h-5" />
                     <span className="font-medium flex-1 text-left">{item.label}</span>
-                    {item.badge && (
-                      <span className="w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                        {item.badge}
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -761,11 +777,6 @@ export default function InfluencerDashboard() {
                     }`}>
                     <Icon className="w-5 h-5 flex-shrink-0" />
                     <span className="font-medium flex-1 text-left text-sm">{item.label}</span>
-                    {item.badge && (
-                      <span className="w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0">
-                        {item.badge}
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -824,10 +835,10 @@ export default function InfluencerDashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           {[
-            { label: 'Total Earnings', value: '₹12,450', change: '12.5%', icon: DollarSign, color: 'text-green-400', bg: 'bg-green-400/10' },
-            { label: 'Active Campaigns', value: '5', change: '25%', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-            { label: 'Total Reach', value: '485K', change: '18.7%', icon: Eye, color: 'text-purple-400', bg: 'bg-purple-400/10' },
-            { label: 'Engagement Rate', value: '4.8%', change: '0.6%', icon: Heart, color: 'text-pink-400', bg: 'bg-pink-400/10' },
+            { label: 'Total Earnings', value: '$0', change: '0%', icon: DollarSign, color: 'text-green-400', bg: 'bg-green-400/10' },
+            { label: 'Active Campaigns', value: '0', change: '0%', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+            { label: 'Total Reach', value: '0', change: '0%', icon: Eye, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+            { label: 'Engagement Rate', value: overviewEngagementRate, change: '0%', icon: Heart, color: 'text-pink-400', bg: 'bg-pink-400/10' },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
@@ -856,31 +867,9 @@ export default function InfluencerDashboard() {
                 View All →
               </button>
             </div>
-            <div className="space-y-3">
-              {[
-                { brand: 'Lakmé', logo: '/lakme.png', logoFallback: 'L', logoColor: 'bg-red-100', budget: '$10,000', desc: 'Beauty Glows Campaign', tags: ['Instagram', 'Reel'], status: 'In Progress', statusColor: 'bg-blue-500/20 text-blue-300' },
-                { brand: 'Nykaa', logo: '', logoFallback: 'N', logoColor: 'bg-pink-500', budget: '$15,000', desc: 'Summer Glow Edit', tags: ['Instagram', 'Post'], status: 'Approved', statusColor: 'bg-green-500/20 text-green-300' },
-                { brand: 'Mamaearth', logo: '', logoFallback: 'M', logoColor: 'bg-green-600', budget: '$8,000', desc: 'Skincare Routine Challenge', tags: ['YouTube', 'Video'], status: 'Pending', statusColor: 'bg-yellow-500/20 text-yellow-300' },
-              ].map((c, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
-                  <div className={`w-12 h-12 ${c.logoColor} rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0`}>
-                    {c.logoFallback}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="font-semibold text-white text-sm">{c.brand}</p>
-                      <p className="text-primary font-bold text-sm">{c.budget}</p>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-1">{c.desc}</p>
-                    <div className="flex items-center gap-1.5">
-                      {c.tags.map((tag, j) => (
-                        <span key={j} className="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">{tag}</span>
-                      ))}
-                      <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${c.statusColor}`}>{c.status}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="bg-gray-800 rounded-lg p-8 text-center">
+              <p className="text-white font-medium mb-1">No recent campaigns</p>
+              <p className="text-xs text-gray-400">Campaign activity will appear here.</p>
             </div>
           </div>
 
@@ -940,26 +929,9 @@ export default function InfluencerDashboard() {
               <h2 className="font-bold text-white">Recent Messages</h2>
               <button onClick={() => setActiveTab('messages')} className="text-primary text-xs hover:underline">View All →</button>
             </div>
-            <div className="space-y-2">
-              {[
-                { brand: 'Nike', initial: 'N', color: 'bg-black border border-gray-700', msg: "Congrats! Your story has been approved.", time: '2h ago' },
-                { brand: 'TechBrand', initial: 'T', color: 'bg-blue-600', msg: "Your YouTube video is live. Great work!", time: '5h ago' },
-                { brand: 'BeautyPlus', initial: 'B', color: 'bg-red-500', msg: "Please submit the final content.", time: '1d ago' },
-              ].map((m, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-750 transition-colors"
-                  onClick={() => setActiveTab('messages')}>
-                  <div className={`w-10 h-10 ${m.color} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-                    {m.initial}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-white text-sm">{m.brand}</p>
-                      <p className="text-gray-500 text-xs">{m.time}</p>
-                    </div>
-                    <p className="text-gray-400 text-xs truncate">{m.msg}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="bg-gray-800 rounded-lg p-8 text-center">
+              <p className="text-white font-medium mb-1">No recent messages</p>
+              <p className="text-xs text-gray-400">New conversations will appear here.</p>
             </div>
           </div>
 
@@ -972,43 +944,20 @@ export default function InfluencerDashboard() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-xs text-gray-400 mb-1">Total Earnings</p>
-                <p className="text-xl font-bold text-white">₹12,450</p>
-                <p className="text-xs text-green-400 mt-1">↑ 12.5% this month</p>
+                <p className="text-xl font-bold text-white">$0</p>
+                <p className="text-xs text-green-400 mt-1">↑ 0% this month</p>
               </div>
               <div className="space-y-2">
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-xs text-yellow-400 font-medium">Pending</p>
-                  <p className="text-lg font-bold text-white">₹3,200</p>
+                  <p className="text-lg font-bold text-white">$0</p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-xs text-blue-400 font-medium">Available</p>
-                  <p className="text-lg font-bold text-white">₹9,250</p>
+                  <p className="text-lg font-bold text-white">$0</p>
                 </div>
               </div>
             </div>
-            {/* Transactions */}
-            <div className="space-y-2 mb-3">
-              {[
-                { brand: 'Lakmé', initial: 'L', color: 'bg-red-100', amount: '+₹10,000', date: 'May 20' },
-                { brand: 'Nykaa', initial: 'N', color: 'bg-pink-500', amount: '+₹15,000', date: 'May 10' },
-                { brand: 'Mamaearth', initial: 'M', color: 'bg-green-600', amount: '+₹8,000', date: 'Apr 28' },
-              ].map((t, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className={`w-8 h-8 ${t.color} rounded-lg flex items-center justify-center text-gray-800 font-bold text-xs flex-shrink-0`}>
-                    {t.initial}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white text-xs font-medium">{t.brand}</p>
-                    <p className="text-gray-500 text-xs">{t.date}</p>
-                  </div>
-                  <p className="text-green-400 text-xs font-bold">{t.amount}</p>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setActiveTab('earnings')}
-              className="w-full bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg text-sm transition-colors">
-              Withdraw Earnings
-            </button>
           </div>
         </div>
       </div>
@@ -1639,9 +1588,9 @@ export default function InfluencerDashboard() {
               <h1 className="text-2xl font-bold text-white mb-6">Earnings</h1>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {[
-                  { label: 'Total Earnings', value: '$12,450', sub: '+12.5% this month', color: 'text-green-400' },
-                  { label: 'Pending', value: '$3,200', sub: 'Awaiting payment', color: 'text-yellow-400' },
-                  { label: 'Available', value: '$9,250', sub: 'Ready to withdraw', color: 'text-blue-400' },
+                  { label: 'Total Earnings', value: '$0', sub: 'No earnings yet', color: 'text-green-400' },
+                  { label: 'Pending', value: '$0', sub: 'Awaiting payment', color: 'text-yellow-400' },
+                  { label: 'Available', value: '$0', sub: 'Ready to withdraw', color: 'text-blue-400' },
                 ].map((e) => (
                   <div key={e.label} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <p className="text-gray-400 text-sm mb-1">{e.label}</p>
@@ -1650,28 +1599,6 @@ export default function InfluencerDashboard() {
                   </div>
                 ))}
               </div>
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 mb-4">
-                <h2 className="font-bold text-white mb-4">Recent Transactions</h2>
-                {[
-                  { brand: 'Lakme', amount: '+$10,000', date: 'May 20', color: 'bg-pink-500' },
-                  { brand: 'Nike', amount: '+$7,000', date: 'May 10', color: 'bg-black border border-gray-700' },
-                  { brand: 'Mamaearth', amount: '+$8,000', date: 'Apr 28', color: 'bg-green-600' },
-                ].map((t) => (
-                  <div key={t.brand} className="flex items-center gap-3 py-3 border-b border-gray-800 last:border-0">
-                    <div className={`w-10 h-10 ${t.color} rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-                      {t.brand[0]}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-white font-medium text-sm">{t.brand}</p>
-                      <p className="text-gray-400 text-xs">{t.date}</p>
-                    </div>
-                    <p className="text-green-400 font-bold text-sm">{t.amount}</p>
-                  </div>
-                ))}
-              </div>
-              <button className="w-full bg-primary hover:bg-secondary text-black font-semibold py-3 rounded-lg transition-colors">
-                Withdraw Earnings
-              </button>
             </div>
           )}
 
@@ -1679,93 +1606,10 @@ export default function InfluencerDashboard() {
           {activeTab === 'messages' && (
             <div>
               <h1 className="text-2xl font-bold text-white mb-4">Messages</h1>
-              <div className="flex gap-4 h-[600px]">
-                {/* Conversation list */}
-                <div className="w-72 bg-gray-900 rounded-xl border border-gray-800 flex flex-col flex-shrink-0">
-                  <div className="p-3 border-b border-gray-800">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                      <input className="w-full bg-gray-800 text-white text-sm rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-gray-500"
-                        placeholder="Search..." />
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto">
-                    {mockMessages.map((conv) => (
-                      <button key={conv.id} onClick={() => setSelectedConversation(conv)}
-                        className={`w-full flex items-center gap-3 p-3 hover:bg-gray-800 transition-colors ${selectedConversation.id === conv.id ? 'bg-gray-800' : ''}`}>
-                        <div className="relative flex-shrink-0">
-                          <div className={`w-10 h-10 ${conv.brandColor} rounded-full flex items-center justify-center text-white font-bold text-sm`}>
-                            {conv.brandInitial}
-                          </div>
-                          {conv.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-900" />}
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="text-white text-sm font-medium">{conv.brand}</p>
-                            <p className="text-gray-500 text-xs">{conv.time}</p>
-                          </div>
-                          <p className="text-gray-400 text-xs truncate">{conv.lastMessage}</p>
-                        </div>
-                        {conv.unread > 0 && (
-                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
-                            {conv.unread}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Chat window */}
-                <div className="flex-1 bg-gray-900 rounded-xl border border-gray-800 flex flex-col">
-                  {/* Header */}
-                  <div className="flex items-center gap-3 p-4 border-b border-gray-800">
-                    <div className={`w-10 h-10 ${selectedConversation.brandColor} rounded-full flex items-center justify-center text-white font-bold`}>
-                      {selectedConversation.brandInitial}
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">{selectedConversation.brand}</p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1">
-                        Brand Team
-                        {selectedConversation.online && <><span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block ml-1" />Online now</>}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {selectedConversation.messages.map((msg) => (
-                      <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                        {msg.sender === 'brand' && (
-                          <div className={`w-8 h-8 ${selectedConversation.brandColor} rounded-full flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1`}>
-                            {selectedConversation.brandInitial}
-                          </div>
-                        )}
-                        <div className="max-w-xs">
-                          <div className={`rounded-2xl px-4 py-3 text-sm ${
-                            msg.sender === 'me' ? 'bg-purple-700 text-white rounded-tr-sm' : 'bg-gray-800 text-white rounded-tl-sm'
-                          }`}>
-                            {msg.text}
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1 px-1">{msg.time}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Input */}
-                  <div className="p-4 border-t border-gray-800 flex items-center gap-3">
-                    <input
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-gray-500"
-                      placeholder="Type a message..."
-                    />
-                    <button className="w-11 h-11 bg-primary hover:bg-secondary rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
-                      <Send className="w-5 h-5 text-black" />
-                    </button>
-                  </div>
-                </div>
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-10 text-center">
+                <MessageSquare className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-white font-medium mb-1">No messages yet</p>
+                <p className="text-sm text-gray-400">Your chats with brands will appear here.</p>
               </div>
             </div>
           )}
@@ -1775,28 +1619,14 @@ export default function InfluencerDashboard() {
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-white">Notifications</h1>
-                <button className="text-primary text-sm hover:underline">Mark all as read</button>
+                <button className="text-primary text-sm hover:underline opacity-50 cursor-not-allowed" disabled>
+                  Mark all as read
+                </button>
               </div>
-              <div className="space-y-2">
-                {mockNotifications.map((notif) => (
-                  <div key={notif.id} className={`flex items-start gap-3 p-4 rounded-xl border transition-colors ${
-                    notif.isNew ? 'bg-gray-900 border-gray-700' : 'bg-gray-950 border-gray-800'
-                  }`}>
-                    <div className={`w-10 h-10 ${notif.brandColor} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-                      {notif.brandInitial}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-sm">{notif.brand}</p>
-                      <p className="text-gray-400 text-sm">{notif.message}</p>
-                      <p className="text-gray-500 text-xs mt-1">{notif.time}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                      notif.isNew ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-400'
-                    }`}>
-                      {notif.isNew ? 'New' : 'Read'}
-                    </span>
-                  </div>
-                ))}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-10 text-center">
+                <Bell className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-white font-medium mb-1">No notifications yet</p>
+                <p className="text-sm text-gray-400">You will see new updates here.</p>
               </div>
             </div>
           )}
