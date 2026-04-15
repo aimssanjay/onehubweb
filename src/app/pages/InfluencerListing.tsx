@@ -24,6 +24,20 @@ interface InfluencerListResponse {
 const DEFAULT_LIMIT = 12;
 
 function parseNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  if (typeof value === 'string') {
+    const raw = value.trim().toLowerCase().replace(/,/g, '');
+    if (!raw) return fallback;
+
+    const multiplier = raw.endsWith('k') ? 1_000 : raw.endsWith('m') ? 1_000_000 : raw.endsWith('b') ? 1_000_000_000 : 1;
+    const numericPart = multiplier === 1 ? raw : raw.slice(0, -1);
+    const parsed = Number(numericPart);
+    return Number.isFinite(parsed) ? parsed * multiplier : fallback;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -44,6 +58,28 @@ function extractPagination(data: Record<string, unknown>, fallbackPage: number, 
 
 function normalizePlatformName(name: string) {
   return name.trim().toLowerCase();
+}
+
+function toNumberArray(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => parseNumber(item, NaN)).filter((num) => Number.isFinite(num));
+  }
+  if (typeof value === 'number') {
+    const parsed = parseNumber(value, NaN);
+    return Number.isFinite(parsed) ? [parsed] : [];
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const parsed = parseNumber(obj.id ?? obj.category_id ?? obj.categoryId, NaN);
+    return Number.isFinite(parsed) ? [parsed] : [];
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((part) => parseNumber(part.trim(), NaN))
+      .filter((num) => Number.isFinite(num));
+  }
+  return [];
 }
 
 export function InfluencerListing() {
@@ -186,49 +222,152 @@ export function InfluencerListing() {
 
   const getPlatformFollowersFromRow = (row: Record<string, unknown>) => {
     const result: Influencer['platforms'] = { instagram: 0, youtube: 0, tiktok: 0 };
-    const rawPlatforms = row.platforms;
+    const rawPlatforms =
+      row.platforms ||
+      row.social_accounts ||
+      row.platform_accounts ||
+      row.influencer_platforms;
 
     if (Array.isArray(rawPlatforms)) {
       rawPlatforms.forEach((platformItem) => {
         if (!platformItem || typeof platformItem !== 'object') return;
         const item = platformItem as Record<string, unknown>;
-        const platformId = parseNumber(item.platform_id, 0);
-        const platformName = normalizePlatformName(String(item.platform_name || platformNameById.get(platformId) || ''));
-        const followers = parseNumber(item.followers, 0);
+        const nestedPlatform = item.platform && typeof item.platform === 'object'
+          ? (item.platform as Record<string, unknown>)
+          : null;
+        const platformId = parseNumber(
+          item.platform_id ?? item.id ?? nestedPlatform?.id,
+          0
+        );
+        const platformName = normalizePlatformName(
+          String(
+            item.platform_name ||
+            item.name ||
+            nestedPlatform?.name ||
+            platformNameById.get(platformId) ||
+            ''
+          )
+        );
+        const followers = parseNumber(
+          item.followers ??
+          item.follower_count ??
+          item.followers_count ??
+          item.followersCount ??
+          item.total_followers ??
+          item.totalFollowers ??
+          (item.pivot && typeof item.pivot === 'object'
+            ? (item.pivot as Record<string, unknown>).followers
+            : undefined),
+          0
+        );
 
         if (platformName.includes('instagram')) result.instagram = followers;
         if (platformName.includes('youtube')) result.youtube = followers;
         if (platformName.includes('tiktok')) result.tiktok = followers;
+        if (platformId === 1 && result.instagram === 0) result.instagram = followers;
+        if (platformId === 2 && result.youtube === 0) result.youtube = followers;
+        if (platformId === 3 && result.tiktok === 0) result.tiktok = followers;
       });
     } else if (rawPlatforms && typeof rawPlatforms === 'object') {
       const obj = rawPlatforms as Record<string, unknown>;
-      result.instagram = parseNumber(obj.instagram, 0);
-      result.youtube = parseNumber(obj.youtube, 0);
-      result.tiktok = parseNumber(obj.tiktok, 0);
+      result.instagram = parseNumber(obj.instagram ?? obj.instagram_followers ?? obj.instagramFollowers, 0);
+      result.youtube = parseNumber(obj.youtube ?? obj.youtube_followers ?? obj.youtubeFollowers, 0);
+      result.tiktok = parseNumber(obj.tiktok ?? obj.tiktok_followers ?? obj.tiktokFollowers, 0);
+    }
+
+    // Top-level fallbacks from API row
+    if (result.instagram === 0) result.instagram = parseNumber(row.instagram_followers, 0);
+    if (result.youtube === 0) result.youtube = parseNumber(row.youtube_followers, 0);
+    if (result.tiktok === 0) result.tiktok = parseNumber(row.tiktok_followers, 0);
+    if (result.instagram === 0) result.instagram = parseNumber(row.followers_count, 0);
+
+    // If backend gives one combined followers count, map to selected/known platform for display.
+    const combinedFollowers = parseNumber(row.total_followers ?? row.followers, 0);
+    if (combinedFollowers > 0 && result.instagram + result.youtube + result.tiktok === 0) {
+      const platformId = parseNumber(row.platform_id, 0);
+      if (platformId === 2) result.youtube = combinedFollowers;
+      else if (platformId === 3) result.tiktok = combinedFollowers;
+      else result.instagram = combinedFollowers;
     }
 
     return result;
   };
 
   const mapApiInfluencer = (row: Record<string, unknown>, index: number): Influencer => {
-    const categoriesFromApi = Array.isArray(row.categories)
-      ? row.categories
-          .map((categoryRow) => {
-            if (typeof categoryRow === 'string') return categoryRow;
-            if (categoryRow && typeof categoryRow === 'object') {
-              const catObj = categoryRow as Record<string, unknown>;
-              return String(catObj.name || '');
-            }
-            return '';
-          })
-          .filter(Boolean)
-      : [];
+    const categoriesFromApiSet = new Set<string>();
+    const categorySources = [
+      row.categories,
+      row.category,
+      row.category_names,
+      row.category_name,
+      row.category_title,
+      row.categoryType,
+      row.influencer_categories,
+    ];
 
-    const category = categoriesFromApi[0] || String(row.category_name || row.category || 'General');
+    categorySources.forEach((source) => {
+      if (Array.isArray(source)) {
+        source.forEach((categoryRow) => {
+          if (typeof categoryRow === 'string' && categoryRow.trim()) {
+            categoriesFromApiSet.add(categoryRow.trim());
+            return;
+          }
+          if (categoryRow && typeof categoryRow === 'object') {
+            const catObj = categoryRow as Record<string, unknown>;
+            const catName = String(
+              catObj.name ||
+              catObj.category_name ||
+              (catObj.category && typeof catObj.category === 'object'
+                ? (catObj.category as Record<string, unknown>).name
+                : '')
+            ).trim();
+            if (catName) categoriesFromApiSet.add(catName);
+          }
+        });
+      } else if (source && typeof source === 'object') {
+        const catObj = source as Record<string, unknown>;
+        const catName = String(
+          catObj.name ||
+          catObj.category_name ||
+          (catObj.category && typeof catObj.category === 'object'
+            ? (catObj.category as Record<string, unknown>).name
+            : '')
+        ).trim();
+        if (catName) categoriesFromApiSet.add(catName);
+      } else if (typeof source === 'string' && source.trim()) {
+        source
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((name) => categoriesFromApiSet.add(name));
+      }
+    });
+
+    const categoryIdsFromApi = toNumberArray(row.category_ids ?? row.categories_ids ?? row.category_id);
+    categoryIdsFromApi.forEach((categoryId) => {
+      const mappedName = categoryNameById.get(categoryId);
+      if (mappedName) categoriesFromApiSet.add(mappedName);
+    });
+
+    const categoriesFromApi = Array.from(categoriesFromApiSet);
+    const fallbackCategoryName =
+      (selectedCategories.length > 0 ? categoryNameById.get(selectedCategories[0]) : '') ||
+      '';
+
+    const rawCategory =
+      typeof row.category === 'string'
+        ? row.category
+        : (row.category_name || '');
+    const category = categoriesFromApi[0] || String(rawCategory || fallbackCategoryName || 'General');
     const name = String(row.name || row.full_name || 'Influencer');
     const usernameRaw = String(row.username || row.handle || row.slug || name.toLowerCase().replace(/\s+/g, ''));
     const username = usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
     const platforms = getPlatformFollowersFromRow(row);
+    const rawPlatforms =
+      row.platforms ||
+      row.social_accounts ||
+      row.platform_accounts ||
+      row.influencer_platforms;
     const profileImage = String(
       row.profile_pic ||
       row.profile_image ||
@@ -239,7 +378,21 @@ export function InfluencerListing() {
     const country = String(row.country_name || row.country || '').trim();
     const location = [city, country].filter(Boolean).join(', ') || 'Not specified';
     const startingPrice = parseNumber(row.price_start ?? row.base_price, 0);
-    const engagement = parseNumber(row.engagement_rate, 0);
+    const engagementFromPlatforms = Array.isArray(rawPlatforms)
+      ? parseNumber(
+          (rawPlatforms[0] as Record<string, unknown> | undefined)?.engagement_rate ??
+          (rawPlatforms[0] as Record<string, unknown> | undefined)?.engagementRate ??
+          (rawPlatforms[0] as Record<string, unknown> | undefined)?.avg_engagement,
+          0
+        )
+      : 0;
+    const engagement = parseNumber(
+      row.engagement_rate ??
+      row.engagement ??
+      row.avg_engagement ??
+      row.average_engagement_rate,
+      engagementFromPlatforms
+    );
     const rating = parseNumber(row.rating, 4.5);
     const id = String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`);
 
@@ -276,14 +429,19 @@ export function InfluencerListing() {
 
       try {
         const allPlatformIds = apiPlatforms.map((platform) => platform.id).filter((id) => Number.isFinite(id));
+        const allCategoryIds = categories.map((category) => category.id).filter((id) => Number.isFinite(id));
         const effectivePlatformIds =
           selectedPlatforms.length > 0
             ? selectedPlatforms
             : (allPlatformIds.length > 0 ? allPlatformIds : [1, 2, 3, 4]);
+        const effectiveCategoryIds =
+          selectedCategories.length > 0
+            ? selectedCategories
+            : (allCategoryIds.length > 0 ? allCategoryIds : undefined);
 
         const payload = {
           platform_id: effectivePlatformIds,
-          category_id: selectedCategories,
+          category_id: effectiveCategoryIds,
           keyword: searchQuery.trim(),
           min_price: priceRange[0],
           max_price: priceRange[1],
@@ -314,11 +472,52 @@ export function InfluencerListing() {
           (Array.isArray(result.data) && result.data) ||
           [];
 
-        const mapped = rawRows
+        let mapped = rawRows
           .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
           .map((row, index) => mapApiInfluencer(row, index));
 
-        const pagination = extractPagination(responseData, currentPage, limit, mapped.length);
+        let pagination = extractPagination(responseData, currentPage, limit, mapped.length);
+
+        const hasNoExplicitFilters =
+          !searchQuery.trim() &&
+          selectedCategories.length === 0 &&
+          selectedPlatforms.length === 0;
+
+        // Safety retry: some backends return empty for full filter payload when filters are not explicitly selected.
+        if (mapped.length === 0 && hasNoExplicitFilters) {
+          const fallbackPayload = {
+            platform_id: effectivePlatformIds,
+            category_id: effectiveCategoryIds,
+            keyword: '',
+            page: currentPage,
+            limit,
+          };
+
+          const fallbackResponse = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackPayload),
+          });
+
+          if (fallbackResponse.ok) {
+            const fallbackResult: InfluencerListResponse = await fallbackResponse.json();
+            const fallbackData = (fallbackResult?.data && typeof fallbackResult.data === 'object'
+              ? fallbackResult.data
+              : {}) as Record<string, unknown>;
+            const fallbackRows =
+              (Array.isArray(fallbackData.influencers) && fallbackData.influencers) ||
+              (Array.isArray(fallbackData.list) && fallbackData.list) ||
+              (Array.isArray(fallbackData.rows) && fallbackData.rows) ||
+              (Array.isArray(fallbackResult.data) && fallbackResult.data) ||
+              [];
+
+            mapped = fallbackRows
+              .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+              .map((row, index) => mapApiInfluencer(row, index));
+            pagination = extractPagination(fallbackData, currentPage, limit, mapped.length);
+          }
+        }
+
         setInfluencerResults(mapped);
         setTotalCount(pagination.total);
         setTotalPages(pagination.totalPages);
@@ -333,7 +532,7 @@ export function InfluencerListing() {
     };
 
     fetchInfluencers();
-  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, currentPage, limit, minRating, apiPlatforms]);
+  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, currentPage, limit, minRating, apiPlatforms, categories]);
 
   const paginationPages = useMemo(() => {
     const pages: number[] = [];
