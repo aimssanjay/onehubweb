@@ -22,6 +22,7 @@ type SharedAnalyticsData = {
   instagram: { followers: string; avgViews: string; engagement: string };
   tiktok: { followers: string; avgViews: string; engagement: string };
   youtube: { followers: string; avgViews: string; engagement: string };
+  others: { followers: string; avgViews: string; engagement: string };
   audienceLocation: Array<{ country: string; percentage: string }>;
   audienceAge: Array<{ range: string; percentage: string }>;
   audienceGender: { female: string; male: string; other?: string };
@@ -89,24 +90,19 @@ const mockNotifications = [
 const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
 
 const DEFAULT_ANALYTICS_DATA: SharedAnalyticsData = {
-  instagram: { followers: '1.5M', avgViews: '250k', engagement: '5.0%' },
-  tiktok: { followers: '850k', avgViews: '500k', engagement: '7.2%' },
-  youtube: { followers: '2.3M', avgViews: '1.2M', engagement: '4.5%' },
-  audienceLocation: [
-    { country: 'United States', percentage: '60' },
-    { country: 'United Kingdom', percentage: '16' },
-    { country: 'Brazil', percentage: '62' },
-    { country: 'Other', percentage: '10' },
-  ],
-  audienceAge: [
-    { range: '13-17', percentage: '60' },
-    { range: '18-24', percentage: '62' },
-    { range: '25-34', percentage: '18' },
-    { range: '35-44', percentage: '4' },
-    { range: '45-64', percentage: '1' },
-  ],
-  audienceGender: { female: '70', male: '30' },
+  instagram: { followers: '', avgViews: '', engagement: '' },
+  tiktok: { followers: '', avgViews: '', engagement: '' },
+  youtube: { followers: '', avgViews: '', engagement: '' },
+  others: { followers: '', avgViews: '', engagement: '' },
+  audienceLocation: [],
+  audienceAge: [],
+  audienceGender: { female: '', male: '', other: '' },
 };
+
+const isLegacySeededAnalytics = (data: any) =>
+  data?.instagram?.followers === '1.5M' ||
+  data?.tiktok?.followers === '850k' ||
+  data?.youtube?.followers === '2.3M';
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
@@ -327,10 +323,16 @@ export default function InfluencerDashboard() {
 
       try {
         const parsed = JSON.parse(savedAnalytics);
+        if (isLegacySeededAnalytics(parsed)) {
+          localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+          setAnalyticsData(DEFAULT_ANALYTICS_DATA);
+          return;
+        }
         setAnalyticsData({
           instagram: parsed.instagram || DEFAULT_ANALYTICS_DATA.instagram,
           tiktok: parsed.tiktok || DEFAULT_ANALYTICS_DATA.tiktok,
           youtube: parsed.youtube || DEFAULT_ANALYTICS_DATA.youtube,
+          others: parsed.others || DEFAULT_ANALYTICS_DATA.others,
           audienceLocation: parsed.audienceLocation || DEFAULT_ANALYTICS_DATA.audienceLocation,
           audienceAge: parsed.audienceAge || DEFAULT_ANALYTICS_DATA.audienceAge,
           audienceGender: parsed.audienceGender || DEFAULT_ANALYTICS_DATA.audienceGender,
@@ -595,34 +597,44 @@ export default function InfluencerDashboard() {
   const femalePct = Number(analyticsData.audienceGender.female) || 0;
   const malePct = Number(analyticsData.audienceGender.male) || 0;
   const otherPct = Number(analyticsData.audienceGender.other) || 0;
+  const totalGenderPct = femalePct + malePct + otherPct;
   const joinedDateLabel = getJoinedDateLabel(userData);
-  const overviewLocations = analyticsData.audienceLocation.slice(0, 4).map((loc, index) => ({
-    country: loc.country || `Location ${index + 1}`,
-    pct: Number(loc.percentage) || 0,
-    color: ['bg-yellow-400', 'bg-blue-400', 'bg-purple-400', 'bg-gray-400'][index] || 'bg-gray-400',
-  }));
-  const profileLocations = analyticsData.audienceLocation.slice(0, 4).map((loc, index) => ({
-    country: loc.country || `Location ${index + 1}`,
-    pct: Number(loc.percentage) || 0,
-    color: ['bg-primary', 'bg-primary', 'bg-primary', 'bg-primary'][index] || 'bg-primary',
-  }));
-  const profileAgeDistribution = analyticsData.audienceAge.map((age, index) => ({
-    range: age.range || `Range ${index + 1}`,
-    pct: Number(age.percentage) || 0,
-  }));
+  const overviewLocations = analyticsData.audienceLocation
+    .filter((loc) => loc.country && (Number(loc.percentage) || 0) > 0)
+    .slice(0, 4)
+    .map((loc, index) => ({
+      country: loc.country,
+      pct: Number(loc.percentage) || 0,
+      color: ['bg-yellow-400', 'bg-blue-400', 'bg-purple-400', 'bg-gray-400'][index] || 'bg-gray-400',
+    }));
+  const profileLocations = analyticsData.audienceLocation
+    .filter((loc) => loc.country && (Number(loc.percentage) || 0) > 0)
+    .slice(0, 4)
+    .map((loc) => ({
+      country: loc.country,
+      pct: Number(loc.percentage) || 0,
+      color: 'bg-primary',
+    }));
+  const profileAgeDistribution = analyticsData.audienceAge
+    .filter((age) => age.range && (Number(age.percentage) || 0) > 0)
+    .map((age) => ({
+      range: age.range,
+      pct: Number(age.percentage) || 0,
+    }));
   const formatOverviewFollowers = (value: string | number) => {
     const raw = String(value ?? '').trim();
-    if (!raw) return '0';
+    if (!raw) return '-';
     if (/[kKmM]$/.test(raw)) return raw.replace('K', 'k').replace('M', 'M');
     const parsed = Number(raw.replace(/,/g, ''));
-    if (!Number.isFinite(parsed)) return raw;
+    if (!Number.isFinite(parsed)) return '-';
+    if (parsed <= 0) return '-';
     if (parsed >= 1000000) return `${(parsed / 1000000).toFixed(1)}M`;
     if (parsed >= 1000) return `${Math.round(parsed / 1000)}k`;
     return String(Math.round(parsed));
   };
   const formatOverviewEngagement = (value: string | number) => {
     const raw = String(value ?? '').trim();
-    if (!raw) return '0%';
+    if (!raw) return '-';
     return raw.endsWith('%') ? raw : `${raw}%`;
   };
   const socialPerformanceStats = [
@@ -646,6 +658,13 @@ export default function InfluencerDashboard() {
       engagement: formatOverviewEngagement(analyticsData.tiktok.engagement),
       icon: Video,
       color: 'from-gray-700 to-gray-800',
+    },
+    {
+      name: 'Others',
+      followers: formatOverviewFollowers(analyticsData.others.followers),
+      engagement: formatOverviewEngagement(analyticsData.others.engagement),
+      icon: ExternalLink,
+      color: 'from-amber-500 to-yellow-500',
     },
   ];
 
@@ -872,7 +891,7 @@ export default function InfluencerDashboard() {
               <button onClick={() => setActiveTab('analytics')} className="text-primary text-xs hover:underline">View All →</button>
             </div>
             {/* Platform Stats */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
               {socialPerformanceStats.map((s) => {
                 const Icon = s.icon;
                 return (
@@ -1074,41 +1093,61 @@ export default function InfluencerDashboard() {
 
           {/* Gender */}
           <p className="text-xs font-medium text-gray-400 mb-3">Gender</p>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="relative w-16 h-16 flex-shrink-0">
-              <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
-                <circle cx="18" cy="18" r="13" fill="none" stroke="#374151" strokeWidth="5" />
-                <circle cx="18" cy="18" r="13" fill="none" stroke="#ec4899" strokeWidth="5"
-                  strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
-                <circle cx="18" cy="18" r="13" fill="none" stroke="#3b82f6" strokeWidth="5"
-                  strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
-              </svg>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-pink-500"></div>
-                <span className="text-white text-xs font-medium">{femalePct}% Female</span>
+          {totalGenderPct > 0 ? (
+            <div className="flex items-center gap-3 mb-4">
+              <div className="relative w-16 h-16 flex-shrink-0">
+                <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
+                  <circle cx="18" cy="18" r="13" fill="none" stroke="#374151" strokeWidth="5" />
+                  <circle cx="18" cy="18" r="13" fill="none" stroke="#ec4899" strokeWidth="5"
+                    strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
+                  <circle cx="18" cy="18" r="13" fill="none" stroke="#3b82f6" strokeWidth="5"
+                    strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
+                  <circle cx="18" cy="18" r="13" fill="none" stroke="#f59e0b" strokeWidth="5"
+                    strokeDasharray={`${otherPct} ${Math.max(0, 100 - otherPct)}`} strokeDashoffset={`-${femalePct + malePct}`} strokeLinecap="round" />
+                </svg>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                <span className="text-white text-xs font-medium">{malePct}% Male</span>
+              <div className="space-y-1.5">
+                {femalePct > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-pink-500"></div>
+                    <span className="text-white text-xs font-medium">{femalePct}% Female</span>
+                  </div>
+                )}
+                {malePct > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                    <span className="text-white text-xs font-medium">{malePct}% Male</span>
+                  </div>
+                )}
+                {otherPct > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
+                    <span className="text-white text-xs font-medium">{otherPct}% Other</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-xs text-gray-500 mb-4">No gender data yet</p>
+          )}
 
           {/* Top Locations */}
           <p className="text-xs font-medium text-gray-400 mb-3">Top Locations</p>
-          {overviewLocations.map((loc) => (
-            <div key={loc.country} className="mb-2">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-gray-300">{loc.country}</span>
-                <span className="text-white font-medium">{loc.pct}%</span>
+          {overviewLocations.length === 0 ? (
+            <p className="text-xs text-gray-500">No location data yet</p>
+          ) : (
+            overviewLocations.map((loc) => (
+              <div key={loc.country} className="mb-2">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-300">{loc.country}</span>
+                  <span className="text-white font-medium">{loc.pct}%</span>
+                </div>
+                <div className="h-1.5 bg-gray-800 rounded-full">
+                  <div className={`h-1.5 ${loc.color} rounded-full`} style={{ width: `${loc.pct}%` }} />
+                </div>
               </div>
-              <div className="h-1.5 bg-gray-800 rounded-full">
-                <div className={`h-1.5 ${loc.color} rounded-full`} style={{ width: `${loc.pct}%` }} />
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -1400,54 +1439,68 @@ export default function InfluencerDashboard() {
                   {/* Audience Insights */}
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <h3 className="font-bold text-white mb-4">Audience Insights</h3>
-                    <div className="flex items-center justify-center mb-4">
-                      <div className="relative w-24 h-24">
-                        <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#374151" strokeWidth="3" />
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#a855f7" strokeWidth="3"
-                            strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
-                            strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
-                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f59e0b" strokeWidth="3"
-                            strokeDasharray={`${otherPct} ${Math.max(0, 100 - otherPct)}`} strokeDashoffset={`-${femalePct + malePct}`} strokeLinecap="round" />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xs text-gray-400 text-center">Gender</span>
+                    {totalGenderPct > 0 ? (
+                      <>
+                        <div className="flex items-center justify-center mb-4">
+                          <div className="relative w-24 h-24">
+                            <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#374151" strokeWidth="3" />
+                              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#a855f7" strokeWidth="3"
+                                strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
+                              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
+                                strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
+                              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f59e0b" strokeWidth="3"
+                                strokeDasharray={`${otherPct} ${Math.max(0, 100 - otherPct)}`} strokeDashoffset={`-${femalePct + malePct}`} strokeLinecap="round" />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-xs text-gray-400 text-center">Gender</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-center gap-4 text-sm mb-4 flex-wrap">
-                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-purple-500"></div><span className="text-white">{femalePct}% Female</span></div>
-                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500"></div><span className="text-white">{malePct}% Male</span></div>
-                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-amber-500"></div><span className="text-white">{otherPct}% Other</span></div>
-                    </div>
+                        <div className="flex justify-center gap-4 text-sm mb-4 flex-wrap">
+                          {femalePct > 0 && <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-purple-500"></div><span className="text-white">{femalePct}% Female</span></div>}
+                          {malePct > 0 && <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500"></div><span className="text-white">{malePct}% Male</span></div>}
+                          {otherPct > 0 && <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-amber-500"></div><span className="text-white">{otherPct}% Other</span></div>}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500 mb-4">No gender data yet</p>
+                    )}
                     <h4 className="font-medium text-white text-sm mb-3">Top Locations</h4>
-                    {profileLocations.map((loc) => (
-                      <div key={loc.country} className="mb-2">
-                        <div className="flex justify-between text-xs text-gray-400 mb-1">
-                          <span>{loc.country}</span><span>{loc.pct}%</span>
+                    {profileLocations.length === 0 ? (
+                      <p className="text-sm text-gray-500">No location data yet</p>
+                    ) : (
+                      profileLocations.map((loc) => (
+                        <div key={loc.country} className="mb-2">
+                          <div className="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>{loc.country}</span><span>{loc.pct}%</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-700 rounded-full">
+                            <div className="h-1.5 bg-primary rounded-full" style={{ width: `${loc.pct}%` }} />
+                          </div>
                         </div>
-                        <div className="h-1.5 bg-gray-700 rounded-full">
-                          <div className="h-1.5 bg-primary rounded-full" style={{ width: `${loc.pct}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <h3 className="font-bold text-white mb-4">Audience Age</h3>
-                    <div className="space-y-2">
-                      {profileAgeDistribution.map((age) => (
-                        <div key={age.range} className="mb-1">
-                          <div className="flex justify-between text-xs text-gray-400 mb-1">
-                            <span>{age.range}</span>
-                            <span>{age.pct}%</span>
+                    {profileAgeDistribution.length === 0 ? (
+                      <p className="text-sm text-gray-500">No age data yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {profileAgeDistribution.map((age) => (
+                          <div key={age.range} className="mb-1">
+                            <div className="flex justify-between text-xs text-gray-400 mb-1">
+                              <span>{age.range}</span>
+                              <span>{age.pct}%</span>
+                            </div>
+                            <div className="h-1.5 bg-gray-700 rounded-full">
+                              <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${age.pct}%` }} />
+                            </div>
                           </div>
-                          <div className="h-1.5 bg-gray-700 rounded-full">
-                            <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${age.pct}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                 </div>
