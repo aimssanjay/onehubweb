@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useNavigate } from 'react-router';
-import { Search, SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp } from 'lucide-react';
+import { SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -11,8 +11,40 @@ import { Slider } from '../components/ui/slider';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { UnifiedInfluencerCard } from '../components/UnifiedInfluencerCard';
-import { influencers } from '../../data/mockData';
+import type { Influencer } from '../../data/mockData';
 import { useCategories } from '../hooks/useCategories';
+import { API_BASE_URL } from '../../services/api';
+
+interface InfluencerListResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+const DEFAULT_LIMIT = 12;
+
+function parseNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function extractPagination(data: Record<string, unknown>, fallbackPage: number, fallbackLimit: number, fallbackTotal: number) {
+  const meta = (data.pagination as Record<string, unknown>) || (data.meta as Record<string, unknown>) || {};
+  const page = parseNumber(meta.page ?? data.page, fallbackPage);
+  const limit = parseNumber(meta.limit ?? data.limit, fallbackLimit);
+  const total = parseNumber(meta.total ?? data.total, fallbackTotal);
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, parseNumber(meta.total_pages ?? meta.totalPages ?? data.total_pages ?? data.totalPages, Math.ceil(total / Math.max(limit, 1)))),
+  };
+}
+
+function normalizePlatformName(name: string) {
+  return name.trim().toLowerCase();
+}
 
 export function InfluencerListing() {
   const navigate = useNavigate();
@@ -23,14 +55,21 @@ export function InfluencerListing() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState('recommended');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
+  const [influencerResults, setInfluencerResults] = useState<Influencer[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit] = useState(DEFAULT_LIMIT);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<number[]>([]);
   const [followerRange, setFollowerRange] = useState([0, 1000000]);
-  const [priceRange, setPriceRange] = useState([0, 5000]);
-  const [engagementRange, setEngagementRange] = useState([0, 100]);
+  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [engagementRange, setEngagementRange] = useState([0, 10]);
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
   
@@ -64,9 +103,39 @@ export function InfluencerListing() {
   }, []);
 
   const platforms = apiPlatforms.map((p) => ({
-    id: p.name.toLowerCase(),
+    id: p.id,
+    key: p.name.toLowerCase(),
     label: p.name,
   }));
+
+  const categoryNameById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category.name])),
+    [categories]
+  );
+
+  const platformNameById = useMemo(
+    () => new Map(apiPlatforms.map((platform) => [platform.id, normalizePlatformName(platform.name)])),
+    [apiPlatforms]
+  );
+
+  const apiInfluencers = useMemo(
+    () => {
+      const sorted = [...influencerResults];
+      if (sortBy === 'price-low') {
+        sorted.sort((a, b) => a.startingPrice - b.startingPrice);
+      } else if (sortBy === 'price-high') {
+        sorted.sort((a, b) => b.startingPrice - a.startingPrice);
+      } else if (sortBy === 'followers') {
+        sorted.sort((a, b) => Object.values(b.platforms).reduce((x, y) => x + (y || 0), 0) - Object.values(a.platforms).reduce((x, y) => x + (y || 0), 0));
+      } else if (sortBy === 'engagement') {
+        sorted.sort((a, b) => parseNumber(b.engagement) - parseNumber(a.engagement));
+      } else if (sortBy === 'rating') {
+        sorted.sort((a, b) => b.rating - a.rating);
+      }
+      return sorted;
+    },
+    [influencerResults, sortBy]
+  );
 
   const badges = [
     { id: 'top', label: 'Top Creator' },
@@ -75,60 +144,15 @@ export function InfluencerListing() {
     { id: 'ugc', label: 'UGC Specialist' },
   ];
 
-  const filteredInfluencers = useMemo(() => {
-    return influencers.filter((influencer) => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (
-          !influencer.name.toLowerCase().includes(query) &&
-          !influencer.username.toLowerCase().includes(query) &&
-          !influencer.category.toLowerCase().includes(query)
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedCategories.length > 0) {
-        if (!selectedCategories.includes(influencer.category)) {
-          return false;
-        }
-      }
-
-      if (selectedPlatforms.length > 0) {
-        const hasPlatform = selectedPlatforms.some(
-          (platform) => influencer.platforms[platform as keyof typeof influencer.platforms]
-        );
-        if (!hasPlatform) {
-          return false;
-        }
-      }
-
-      const totalFollowers = Object.values(influencer.platforms).reduce((a, b) => a + b, 0);
-      if (totalFollowers < followerRange[0] || totalFollowers > followerRange[1]) {
-        return false;
-      }
-
-      if (influencer.startingPrice < priceRange[0] || influencer.startingPrice > priceRange[1]) {
-        return false;
-      }
-
-      if (minRating > 0 && influencer.rating < minRating) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, minRating]);
-
-  const toggleCategory = (category: string) => {
+  const toggleCategory = (categoryId: number) => {
     setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+      prev.includes(categoryId) ? prev.filter((c) => c !== categoryId) : [...prev, categoryId]
     );
   };
 
-  const togglePlatform = (platform: string) => {
+  const togglePlatform = (platformId: number) => {
     setSelectedPlatforms((prev) =>
-      prev.includes(platform) ? prev.filter((p) => p !== platform) : [...prev, platform]
+      prev.includes(platformId) ? prev.filter((p) => p !== platformId) : [...prev, platformId]
     );
   };
 
@@ -147,10 +171,11 @@ export function InfluencerListing() {
     setSelectedCategories([]);
     setSelectedPlatforms([]);
     setFollowerRange([0, 1000000]);
-    setPriceRange([0, 5000]);
-    setEngagementRange([0, 100]);
+    setPriceRange([0, 10000]);
+    setEngagementRange([0, 10]);
     setSelectedBadges([]);
     setMinRating(0);
+    setCurrentPage(1);
   };
 
   const formatFollowers = (count: number) => {
@@ -159,6 +184,171 @@ export function InfluencerListing() {
     return count.toString();
   };
 
+  const getPlatformFollowersFromRow = (row: Record<string, unknown>) => {
+    const result: Influencer['platforms'] = { instagram: 0, youtube: 0, tiktok: 0 };
+    const rawPlatforms = row.platforms;
+
+    if (Array.isArray(rawPlatforms)) {
+      rawPlatforms.forEach((platformItem) => {
+        if (!platformItem || typeof platformItem !== 'object') return;
+        const item = platformItem as Record<string, unknown>;
+        const platformId = parseNumber(item.platform_id, 0);
+        const platformName = normalizePlatformName(String(item.platform_name || platformNameById.get(platformId) || ''));
+        const followers = parseNumber(item.followers, 0);
+
+        if (platformName.includes('instagram')) result.instagram = followers;
+        if (platformName.includes('youtube')) result.youtube = followers;
+        if (platformName.includes('tiktok')) result.tiktok = followers;
+      });
+    } else if (rawPlatforms && typeof rawPlatforms === 'object') {
+      const obj = rawPlatforms as Record<string, unknown>;
+      result.instagram = parseNumber(obj.instagram, 0);
+      result.youtube = parseNumber(obj.youtube, 0);
+      result.tiktok = parseNumber(obj.tiktok, 0);
+    }
+
+    return result;
+  };
+
+  const mapApiInfluencer = (row: Record<string, unknown>, index: number): Influencer => {
+    const categoriesFromApi = Array.isArray(row.categories)
+      ? row.categories
+          .map((categoryRow) => {
+            if (typeof categoryRow === 'string') return categoryRow;
+            if (categoryRow && typeof categoryRow === 'object') {
+              const catObj = categoryRow as Record<string, unknown>;
+              return String(catObj.name || '');
+            }
+            return '';
+          })
+          .filter(Boolean)
+      : [];
+
+    const category = categoriesFromApi[0] || String(row.category_name || row.category || 'General');
+    const name = String(row.name || row.full_name || 'Influencer');
+    const usernameRaw = String(row.username || row.handle || row.slug || name.toLowerCase().replace(/\s+/g, ''));
+    const username = usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
+    const platforms = getPlatformFollowersFromRow(row);
+    const profileImage = String(
+      row.profile_pic ||
+      row.profile_image ||
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
+    );
+    const coverImage = String(row.cover_image || profileImage);
+    const city = String(row.city_name || row.city || '').trim();
+    const country = String(row.country_name || row.country || '').trim();
+    const location = [city, country].filter(Boolean).join(', ') || 'Not specified';
+    const startingPrice = parseNumber(row.price_start ?? row.base_price, 0);
+    const engagement = parseNumber(row.engagement_rate, 0);
+    const rating = parseNumber(row.rating, 4.5);
+    const id = String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`);
+
+    return {
+      id,
+      name,
+      username,
+      category,
+      categories: categoriesFromApi.length > 0 ? categoriesFromApi : [category],
+      location,
+      bio: String(row.bio || ''),
+      profileImage,
+      coverImage,
+      verified: Boolean(row.is_verified),
+      featured: Boolean(row.is_featured),
+      platforms,
+      startingPrice,
+      packages: [],
+      portfolio: [],
+      rating,
+      totalOrders: parseNumber(row.total_orders, 0),
+      engagement: engagement > 0 ? engagement.toFixed(1) : undefined,
+    };
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, minRating]);
+
+  useEffect(() => {
+    const fetchInfluencers = async () => {
+      setIsLoading(true);
+      setFetchError('');
+
+      try {
+        const allPlatformIds = apiPlatforms.map((platform) => platform.id).filter((id) => Number.isFinite(id));
+        const effectivePlatformIds =
+          selectedPlatforms.length > 0
+            ? selectedPlatforms
+            : (allPlatformIds.length > 0 ? allPlatformIds : [1, 2, 3, 4]);
+
+        const payload = {
+          platform_id: effectivePlatformIds,
+          category_id: selectedCategories,
+          keyword: searchQuery.trim(),
+          min_price: priceRange[0],
+          max_price: priceRange[1],
+          min_followers: followerRange[0],
+          max_followers: followerRange[1],
+          min_engagement: engagementRange[0],
+          max_engagement: engagementRange[1],
+          page: currentPage,
+          limit,
+        };
+
+        const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const result: InfluencerListResponse = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.message || 'Failed to load influencers');
+        }
+
+        const responseData = (result?.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>;
+        const rawRows =
+          (Array.isArray(responseData.influencers) && responseData.influencers) ||
+          (Array.isArray(responseData.list) && responseData.list) ||
+          (Array.isArray(responseData.rows) && responseData.rows) ||
+          (Array.isArray(result.data) && result.data) ||
+          [];
+
+        const mapped = rawRows
+          .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+          .map((row, index) => mapApiInfluencer(row, index));
+
+        const pagination = extractPagination(responseData, currentPage, limit, mapped.length);
+        setInfluencerResults(mapped);
+        setTotalCount(pagination.total);
+        setTotalPages(pagination.totalPages);
+      } catch (error) {
+        setInfluencerResults([]);
+        setTotalCount(0);
+        setTotalPages(1);
+        setFetchError(error instanceof Error ? error.message : 'Unable to load influencers');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInfluencers();
+  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, currentPage, limit, minRating, apiPlatforms]);
+
+  const paginationPages = useMemo(() => {
+    const pages: number[] = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
   const FilterSection = ({ 
     title, 
     section, 
@@ -166,7 +356,7 @@ export function InfluencerListing() {
   }: { 
     title: string; 
     section: keyof typeof expandedSections; 
-    children: React.ReactNode 
+    children: ReactNode 
   }) => (
     <div className="border-b border-border pb-4 mb-4">
       <button
@@ -248,8 +438,8 @@ export function InfluencerListing() {
             <div key={category.id} className="flex items-center">
               <Checkbox
                 id={`category-${category.id}`}
-                checked={selectedCategories.includes(category.name)}
-                onCheckedChange={() => toggleCategory(category.name)}
+                checked={selectedCategories.includes(category.id)}
+                onCheckedChange={() => toggleCategory(category.id)}
               />
               <label
                 htmlFor={`category-${category.id}`}
@@ -271,7 +461,7 @@ export function InfluencerListing() {
           </div>
           <Slider
             min={0}
-            max={5000}
+            max={10000}
             step={50}
             value={priceRange}
             onValueChange={setPriceRange}
@@ -322,8 +512,8 @@ export function InfluencerListing() {
           </div>
           <Slider
             min={0}
-            max={100}
-            step={1}
+            max={10}
+            step={0.1}
             value={engagementRange}
             onValueChange={setEngagementRange}
           />
@@ -379,7 +569,7 @@ export function InfluencerListing() {
             onClick={() => setShowFilters(false)}
             className="w-full bg-primary text-primary-foreground hover:bg-secondary"
           >
-            Apply Filters ({filteredInfluencers.length} results)
+            Apply Filters ({totalCount} results)
           </Button>
         </div>
       )}
@@ -462,7 +652,7 @@ export function InfluencerListing() {
                   )}
                 </Button>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  <span className="text-foreground font-semibold">{filteredInfluencers.length}</span> creators
+                  <span className="text-foreground font-semibold">{totalCount}</span> creators
                 </p>
               </div>
 
@@ -505,25 +695,25 @@ export function InfluencerListing() {
             {/* Active Filters */}
             {(selectedCategories.length > 0 || selectedPlatforms.length > 0) && (
               <div className="flex flex-wrap gap-2 mb-4 lg:mb-6">
-                {selectedCategories.map((category) => (
+                {selectedCategories.map((categoryId) => (
                   <Badge
-                    key={category}
+                    key={categoryId}
                     variant="secondary"
                     className="gap-2 cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 text-xs sm:text-sm"
-                    onClick={() => toggleCategory(category)}
+                    onClick={() => toggleCategory(categoryId)}
                   >
-                    {category}
+                    {categoryNameById.get(categoryId) || `Category ${categoryId}`}
                     <X className="w-3 h-3" />
                   </Badge>
                 ))}
-                {selectedPlatforms.map((platform) => (
+                {selectedPlatforms.map((platformId) => (
                   <Badge
-                    key={platform}
+                    key={platformId}
                     variant="secondary"
                     className="gap-2 cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 text-xs sm:text-sm"
-                    onClick={() => togglePlatform(platform)}
+                    onClick={() => togglePlatform(platformId)}
                   >
-                    {platform}
+                    {platforms.find((platform) => platform.id === platformId)?.label || `Platform ${platformId}`}
                     <X className="w-3 h-3" />
                   </Badge>
                 ))}
@@ -536,7 +726,7 @@ export function InfluencerListing() {
                 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3' 
                 : 'grid-cols-1'
             } gap-4 sm:gap-5 lg:gap-6`}>
-              {filteredInfluencers.map((influencer) => (
+              {apiInfluencers.map((influencer) => (
                 <UnifiedInfluencerCard
                   key={influencer.id}
                   influencer={influencer}
@@ -546,25 +736,42 @@ export function InfluencerListing() {
             </div>
 
             {/* Empty State */}
-            {filteredInfluencers.length === 0 && (
+            {!isLoading && apiInfluencers.length === 0 && (
               <div className="text-center py-12 sm:py-16">
-                <p className="text-base sm:text-lg text-muted-foreground mb-4">No creators found matching your filters</p>
+                <p className="text-base sm:text-lg text-muted-foreground mb-4">
+                  {fetchError || 'No creators found matching your filters'}
+                </p>
                 <Button onClick={clearFilters} variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                   Clear all filters
                 </Button>
               </div>
             )}
 
-            {/* Pagination Placeholder */}
-            {filteredInfluencers.length > 0 && (
+            {isLoading && (
+              <div className="text-center py-10 text-muted-foreground">Loading creators...</div>
+            )}
+
+            {/* Pagination */}
+            {!isLoading && apiInfluencers.length > 0 && totalPages > 1 && (
               <div className="flex justify-center mt-8 sm:mt-10 lg:mt-12 gap-2">
-                {[1, 2, 3, 4, 5].map((page) => (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  className="border-border text-foreground hover:bg-accent"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+
+                {paginationPages.map((page) => (
                   <Button
                     key={page}
-                    variant={page === 1 ? 'default' : 'outline'}
+                    variant={page === currentPage ? 'default' : 'outline'}
                     size="sm"
+                    onClick={() => setCurrentPage(page)}
                     className={`${
-                      page === 1 
+                      page === currentPage 
                         ? 'bg-primary text-primary-foreground' 
                         : 'border-border text-foreground hover:bg-accent'
                     } w-8 h-8 sm:w-10 sm:h-10 p-0 text-xs sm:text-sm`}
@@ -572,6 +779,16 @@ export function InfluencerListing() {
                     {page}
                   </Button>
                 ))}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  className="border-border text-foreground hover:bg-accent"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
               </div>
             )}
           </div>

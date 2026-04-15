@@ -38,6 +38,21 @@ interface AnalyticsState {
 }
 
 const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
+const PLATFORM_ID_TO_KEY: Record<number, PlatformType> = {
+  1: 'instagram',
+  2: 'youtube',
+  3: 'tiktok',
+};
+const PLATFORM_KEY_TO_ID: Record<PlatformType, number> = {
+  instagram: 1,
+  youtube: 2,
+  tiktok: 3,
+};
+
+type PlatformMeta = {
+  username: string;
+  profile_url: string;
+};
 
 const DEFAULT_ANALYTICS_DATA: AnalyticsState = {
   instagram: {
@@ -138,9 +153,105 @@ export function InfluencerAnalytics() {
   const [activePlatform, setActivePlatform] = useState<PlatformType>('instagram');
   const [isEditingMetrics, setIsEditingMetrics] = useState(false);
   const [isEditingDemographics, setIsEditingDemographics] = useState(false);
+  const [isSavingMetrics, setIsSavingMetrics] = useState(false);
   const [isSavingDemographics, setIsSavingDemographics] = useState(false);
 
   const [analyticsData, setAnalyticsData] = useState<AnalyticsState>(DEFAULT_ANALYTICS_DATA);
+  const [platformMeta, setPlatformMeta] = useState<Record<PlatformType, PlatformMeta>>({
+    instagram: { username: '', profile_url: '' },
+    tiktok: { username: '', profile_url: '' },
+    youtube: { username: '', profile_url: '' },
+  });
+
+  const toStringValue = (value: unknown, fallback = '') => {
+    if (value === null || value === undefined) return fallback;
+    return String(value);
+  };
+
+  const mergeApiProfileIntoAnalytics = (profile: any, current: AnalyticsState): AnalyticsState => {
+    const merged: AnalyticsState = {
+      ...current,
+      instagram: { ...current.instagram },
+      tiktok: { ...current.tiktok },
+      youtube: { ...current.youtube },
+      audienceLocation: [...current.audienceLocation],
+      audienceAge: [...current.audienceAge],
+      audienceGender: { ...current.audienceGender },
+    };
+
+    const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+    socialAccounts.forEach((account: any) => {
+      const platformKey = PLATFORM_ID_TO_KEY[Number(account?.platform_id)];
+      if (!platformKey) return;
+
+      merged[platformKey] = {
+        followers: toStringValue(account?.followers, merged[platformKey].followers),
+        avgViews: toStringValue(
+          account?.total_reach ?? account?.avg_views ?? account?.average_views,
+          merged[platformKey].avgViews
+        ),
+        engagement: toStringValue(account?.engagement_rate, merged[platformKey].engagement),
+      };
+    });
+
+    const audienceLocations = profile?.audience_locations || profile?.audienceLocation;
+    if (Array.isArray(audienceLocations) && audienceLocations.length > 0) {
+      merged.audienceLocation = audienceLocations.map((item: any) => ({
+        country: toStringValue(item?.country),
+        percentage: toStringValue(item?.percentage, '0'),
+      }));
+    }
+
+    const audienceAge = profile?.audience_age || profile?.audienceAge;
+    if (Array.isArray(audienceAge) && audienceAge.length > 0) {
+      merged.audienceAge = audienceAge.map((item: any) => ({
+        range: toStringValue(item?.age_range ?? item?.range),
+        percentage: toStringValue(item?.percentage, '0'),
+      }));
+    }
+
+    const audienceGender = profile?.audience_gender || profile?.audienceGender;
+    if (audienceGender && typeof audienceGender === 'object') {
+      merged.audienceGender = {
+        female: toStringValue(audienceGender?.female, merged.audienceGender.female),
+        male: toStringValue(audienceGender?.male, merged.audienceGender.male),
+        other: toStringValue(audienceGender?.other, merged.audienceGender.other),
+      };
+    }
+
+    return merged;
+  };
+
+  const extractPlatformMeta = (profile: any): Record<PlatformType, PlatformMeta> => {
+    const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+    const meta: Record<PlatformType, PlatformMeta> = {
+      instagram: { username: '', profile_url: '' },
+      tiktok: { username: '', profile_url: '' },
+      youtube: { username: '', profile_url: '' },
+    };
+
+    socialAccounts.forEach((account: any) => {
+      const platformKey = PLATFORM_ID_TO_KEY[Number(account?.platform_id)];
+      if (!platformKey) return;
+      meta[platformKey] = {
+        username: toStringValue(account?.username),
+        profile_url: toStringValue(account?.profile_url),
+      };
+    });
+
+    return meta;
+  };
+
+  const parseMetricToNumber = (value: string) => {
+    const raw = String(value ?? '').trim().toLowerCase().replace(/,/g, '');
+    if (!raw) return 0;
+    const numeric = parseFloat(raw.replace('%', ''));
+    if (!Number.isFinite(numeric)) return 0;
+    if (raw.endsWith('k')) return Math.round(numeric * 1000);
+    if (raw.endsWith('m')) return Math.round(numeric * 1000000);
+    if (raw.endsWith('b')) return Math.round(numeric * 1000000000);
+    return Math.round(numeric);
+  };
 
   useEffect(() => {
     const savedAnalytics = localStorage.getItem(ANALYTICS_STORAGE_KEY);
@@ -169,11 +280,79 @@ export function InfluencerAnalytics() {
     }
   }, []);
 
-  const handleSaveMetrics = () => {
-    localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
-    window.dispatchEvent(new Event('influencer-analytics-updated'));
-    toast.success('Platform metrics updated');
-    setIsEditingMetrics(false);
+  useEffect(() => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) return;
+
+    const loadAnalyticsFromApi = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const result = await response.json();
+        if (!(result.success || response.ok)) return;
+
+        setAnalyticsData((prev) => {
+          const merged = mergeApiProfileIntoAnalytics(result.data || {}, prev);
+          localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(merged));
+          window.dispatchEvent(new Event('influencer-analytics-updated'));
+          return merged;
+        });
+        setPlatformMeta(extractPlatformMeta(result.data || {}));
+      } catch {
+        // Keep existing local analytics state if API fetch fails.
+      }
+    };
+
+    loadAnalyticsFromApi();
+  }, []);
+
+  const handleSaveMetrics = async () => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    const platformsPayload = (Object.keys(PLATFORM_KEY_TO_ID) as PlatformType[]).map((platformKey) => ({
+      platform_id: PLATFORM_KEY_TO_ID[platformKey],
+      username: platformMeta[platformKey]?.username || '',
+      profile_url: platformMeta[platformKey]?.profile_url || '',
+      followers: parseMetricToNumber(analyticsData[platformKey].followers),
+      engagement_rate: parseFloat(String(analyticsData[platformKey].engagement || '').replace('%', '')) || 0,
+      total_reach: String(parseMetricToNumber(analyticsData[platformKey].avgViews)),
+    }));
+
+    try {
+      setIsSavingMetrics(true);
+      const response = await fetch(`${API_BASE_URL}/influencers/update-platforms`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ platforms: platformsPayload }),
+      });
+      const result = await response.json();
+
+      if (!(result.success || response.ok)) {
+        toast.error(result.message || 'Failed to update platform metrics');
+        return;
+      }
+
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
+      window.dispatchEvent(new Event('influencer-analytics-updated'));
+      toast.success('Platform metrics updated');
+      setIsEditingMetrics(false);
+    } catch {
+      toast.error('Server error while saving platform metrics');
+    } finally {
+      setIsSavingMetrics(false);
+    }
   };
 
   const handleSaveDemographics = async () => {
@@ -283,6 +462,16 @@ export function InfluencerAnalytics() {
     }));
   };
 
+  const sanitizeNumericInput = (value: string, allowDecimal = false) => {
+    if (allowDecimal) {
+      const cleaned = value.replace(/[^\d.]/g, '');
+      const firstDot = cleaned.indexOf('.');
+      if (firstDot === -1) return cleaned;
+      return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+    }
+    return value.replace(/\D/g, '');
+  };
+
   const updateLocation = (index: number, field: keyof LocationData, value: string) => {
     setAnalyticsData(prev => {
       const newLocations = [...prev.audienceLocation];
@@ -340,11 +529,13 @@ export function InfluencerAnalytics() {
   const genderChartData = [
     { name: 'Female', value: parseInt(analyticsData.audienceGender.female) || 0 },
     { name: 'Male', value: parseInt(analyticsData.audienceGender.male) || 0 },
+    { name: 'Other', value: parseInt(analyticsData.audienceGender.other) || 0 },
   ];
 
   const COLORS = {
     female: '#8B7BE8',
-    male: '#E0E0E0',
+    male: '#3B82F6',
+    other: '#F59E0B',
     bars: '#6B8EFF',
   };
 
@@ -361,11 +552,12 @@ export function InfluencerAnalytics() {
           {isEditingMetrics ? (
             <Button
               onClick={handleSaveMetrics}
+              disabled={isSavingMetrics}
               className="bg-primary hover:bg-secondary text-black font-medium w-full sm:w-auto text-sm md:text-base"
               size="sm"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save Changes
+              {isSavingMetrics ? 'Saving...' : 'Save Changes'}
             </Button>
           ) : (
             <Button
@@ -408,9 +600,11 @@ export function InfluencerAnalytics() {
             {isEditingMetrics ? (
               <Input
                 value={currentMetrics.followers}
-                onChange={(e) => updateMetric(activePlatform, 'followers', e.target.value)}
+                onChange={(e) => updateMetric(activePlatform, 'followers', sanitizeNumericInput(e.target.value))}
                 className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
-                placeholder="e.g., 1.5M"
+                placeholder="e.g., 1200"
+                type="text"
+                inputMode="numeric"
               />
             ) : (
               <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.followers}</p>
@@ -423,9 +617,11 @@ export function InfluencerAnalytics() {
             {isEditingMetrics ? (
               <Input
                 value={currentMetrics.avgViews}
-                onChange={(e) => updateMetric(activePlatform, 'avgViews', e.target.value)}
+                onChange={(e) => updateMetric(activePlatform, 'avgViews', sanitizeNumericInput(e.target.value))}
                 className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
-                placeholder="e.g., 250k"
+                placeholder="e.g., 11000"
+                type="text"
+                inputMode="numeric"
               />
             ) : (
               <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.avgViews}</p>
@@ -438,9 +634,11 @@ export function InfluencerAnalytics() {
             {isEditingMetrics ? (
               <Input
                 value={currentMetrics.engagement}
-                onChange={(e) => updateMetric(activePlatform, 'engagement', e.target.value)}
+                onChange={(e) => updateMetric(activePlatform, 'engagement', sanitizeNumericInput(e.target.value, true))}
                 className="bg-gray-800 border-gray-700 text-white text-xl md:text-2xl font-bold"
-                placeholder="e.g., 5.0%"
+                placeholder="e.g., 4.90"
+                type="text"
+                inputMode="decimal"
               />
             ) : (
               <p className="text-2xl md:text-4xl font-bold text-white">{currentMetrics.engagement}</p>
@@ -651,6 +849,7 @@ export function InfluencerAnalytics() {
                       >
                         <Cell fill={COLORS.female} />
                         <Cell fill={COLORS.male} />
+                        <Cell fill={COLORS.other} />
                       </Pie>
                       <Tooltip
                         contentStyle={{
@@ -667,12 +866,17 @@ export function InfluencerAnalytics() {
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.female }} />
                     <span className="text-white text-sm md:text-base">Female</span>
-                    <span className="text-primary font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.female}%</span>
+                    <span className="text-purple-400 font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.female}%</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.male }} />
                     <span className="text-white text-sm md:text-base">Male</span>
-                    <span className="text-gray-400 font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.male}%</span>
+                    <span className="text-blue-400 font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.male}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 md:w-4 md:h-4 rounded-full" style={{ backgroundColor: COLORS.other }} />
+                    <span className="text-white text-sm md:text-base">Other</span>
+                    <span className="text-amber-400 font-bold ml-auto text-sm md:text-base">{analyticsData.audienceGender.other}%</span>
                   </div>
                 </div>
               </div>

@@ -6,9 +6,9 @@ import { Input } from '@/app/components/ui/input';
 import {
   LayoutDashboard, User, Briefcase, MessageSquare, Settings, LogOut,
   Instagram, Youtube, Video, TrendingUp, DollarSign, Eye, Heart,
-  Edit, Camera, BarChart3, Menu, X, Bell, FileText,
-  ChevronDown, ChevronUp, MapPin, Mail, Phone, Check,
-  ExternalLink, Search, Send, Filter,
+  Edit, Camera, BarChart3, Menu, X, Bell,
+  ChevronDown, MapPin, Mail, Phone, Check,
+  ExternalLink, Search, Send,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
 import { useCategories } from '../hooks/useCategories';
@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
-  'notifications' | 'analytics' | 'content' | 'settings';
+  'notifications' | 'analytics' | 'settings';
 
 type SharedAnalyticsData = {
   instagram: { followers: string; avgViews: string; engagement: string };
@@ -26,6 +26,21 @@ type SharedAnalyticsData = {
   audienceAge: Array<{ range: string; percentage: string }>;
   audienceGender: { female: string; male: string; other?: string };
 };
+
+type PlatformFormItem = {
+  username: string;
+  profile_url: string;
+  followers: string;
+  engagement_rate: string;
+  total_reach: string;
+};
+
+const PLATFORM_CONFIG = [
+  { platformId: 1, name: 'Instagram', icon: Instagram, color: 'from-purple-600 to-pink-600' },
+  { platformId: 3, name: 'TikTok', icon: Video, color: 'from-gray-800 to-gray-700' },
+  { platformId: 2, name: 'YouTube', icon: Youtube, color: 'from-red-600 to-red-500' },
+  { platformId: 4, name: 'UGC / Other', icon: Video, color: 'from-primary to-secondary' },
+];
 
 // Country list
 const COUNTRIES = [
@@ -43,9 +58,9 @@ const COUNTRIES = [
 
 // Mock data
 const mockCampaigns = [
-  { id: '1', brand: 'Nike', logo: 'N', budget: '₹10,000', category: 'Fitness', platform: 'Instagram', status: 'available', description: 'Post a reel showcasing Nike shoes', matchCategory: 'Fashion' },
-  { id: '2', brand: 'Lakme', logo: 'L', budget: '₹15,000', category: 'Beauty', platform: 'YouTube', status: 'applied', description: 'Beauty tutorial featuring Lakme products', matchCategory: 'Beauty' },
-  { id: '3', brand: 'Mamaearth', logo: 'M', budget: '₹8,000', category: 'Skincare', platform: 'Instagram', status: 'ongoing', description: 'Skincare routine challenge', matchCategory: 'Beauty' },
+  { id: '1', brand: 'Nike', logo: 'N', budget: '$10,000', category: 'Fitness', platform: 'Instagram', status: 'available', description: 'Post a reel showcasing Nike shoes', matchCategory: 'Fashion' },
+  { id: '2', brand: 'Lakme', logo: 'L', budget: '$15,000', category: 'Beauty', platform: 'YouTube', status: 'applied', description: 'Beauty tutorial featuring Lakme products', matchCategory: 'Beauty' },
+  { id: '3', brand: 'Mamaearth', logo: 'M', budget: '$8,000', category: 'Skincare', platform: 'Instagram', status: 'ongoing', description: 'Skincare routine challenge', matchCategory: 'Beauty' },
 ];
 
 const mockMessages = [
@@ -103,7 +118,6 @@ export default function InfluencerDashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [campaignsSubTab, setCampaignsSubTab] = useState<'available' | 'applied' | 'ongoing' | 'completed'>('available');
-  const [campaignsExpanded, setCampaignsExpanded] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(mockMessages[0]);
   const [messageText, setMessageText] = useState('');
   const [countrySearch, setCountrySearch] = useState('');
@@ -115,11 +129,13 @@ export default function InfluencerDashboard() {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', password: '', confirmPassword: '' });
   const [isPasswordUpdating, setIsPasswordUpdating] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [platformForm, setPlatformForm] = useState<Record<number, PlatformFormItem>>({});
   const profileImageInputRef = useRef<HTMLInputElement>(null);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
-    name: '', phone: '', country: '', city: '', bio: '', gender: '', date_of_birth: '',
+    name: '', phone: '', country: '', city: '', bio: '', gender: '', date_of_birth: '', price_start: '',
   });
 
   const normalizeDateInput = (value: string) => {
@@ -144,10 +160,59 @@ export default function InfluencerDashboard() {
     return Number.isFinite(num) ? num : undefined;
   };
 
+  const parseMaybeFloat = (value: string) => {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) return undefined;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : undefined;
+  };
+
+  const getJoinedDateLabel = (data: any) => {
+    const rawDate =
+      data?.created_at ||
+      data?.createdAt ||
+      data?.signup_date ||
+      data?.joined_at ||
+      data?.join_date;
+
+    if (!rawDate) return 'Joined recently';
+
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) return 'Joined recently';
+    return `Joined ${date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  };
+
+  const buildPlatformForm = (socialAccounts: any[] = []): Record<number, PlatformFormItem> => {
+    const byPlatform: Record<number, PlatformFormItem> = {};
+
+    PLATFORM_CONFIG.forEach((platform) => {
+      const account = socialAccounts.find((acc: any) => Number(acc.platform_id) === platform.platformId) || {};
+      byPlatform[platform.platformId] = {
+        username: account.username || '',
+        profile_url: account.profile_url || '',
+        followers: account.followers != null ? String(account.followers) : '',
+        engagement_rate: account.engagement_rate != null ? String(account.engagement_rate) : '',
+        total_reach: account.total_reach != null ? String(account.total_reach) : '',
+      };
+    });
+
+    return byPlatform;
+  };
+
   const applyProfileData = (data: any) => {
-    setUserData(data);
+    setUserData((prev: any) => ({
+      ...(prev || {}),
+      ...(data || {}),
+      price_start:
+        data?.price_start ??
+        data?.base_price ??
+        prev?.price_start ??
+        prev?.base_price ??
+        '',
+    }));
     setProfileImagePreview(data.profile_pic || null);
-    setEditForm({
+    setPlatformForm(buildPlatformForm(data.social_accounts || []));
+    setEditForm((prev) => ({
       name: data.name || '',
       phone: data.phone || '',
       country: data.country || '',
@@ -155,12 +220,34 @@ export default function InfluencerDashboard() {
       bio: data.bio || '',
       gender: data.gender || '',
       date_of_birth: normalizeDateInput(data.date_of_birth || data.dob || ''),
-    });
+      price_start:
+        data.price_start != null
+          ? String(data.price_start)
+          : data.base_price != null
+            ? String(data.base_price)
+            : prev.price_start || '',
+    }));
     setSelectedCategoryIds(
       (data.categories || [])
         .map((cat: any) => cat.id || cat.category_id)
         .filter(Boolean)
     );
+  };
+
+  const updatePlatformField = (platformId: number, field: keyof PlatformFormItem, value: string) => {
+    setPlatformForm((prev) => ({
+      ...prev,
+      [platformId]: {
+        ...(prev[platformId] || {
+          username: '',
+          profile_url: '',
+          followers: '',
+          engagement_rate: '',
+          total_reach: '',
+        }),
+        [field]: value,
+      },
+    }));
   };
 
   const resetEditState = () => {
@@ -174,20 +261,46 @@ export default function InfluencerDashboard() {
     const fetchProfile = async () => {
       const token = localStorage.getItem('influencer_token');
       if (!token) { navigate('/influencer/login'); return; }
+      const cachedUser = localStorage.getItem('influencer_user');
+      const parsedCachedUser = (() => {
+        if (!cachedUser) return null;
+        try {
+          return JSON.parse(cachedUser);
+        } catch {
+          return null;
+        }
+      })();
       try {
         const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         });
-        const result = await response.json();
-        if (result.success) {
-          applyProfileData(result.data);
-        } else {
+
+        if (response.status === 401 || response.status === 403) {
           localStorage.removeItem('influencer_token');
+          localStorage.removeItem('influencer_user');
+          navigate('/influencer/login');
+          return;
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          applyProfileData(result.data);
+          localStorage.setItem('influencer_user', JSON.stringify(result.data));
+        } else if (parsedCachedUser) {
+          applyProfileData(parsedCachedUser);
+          toast.error('Live profile load failed. Showing cached profile.');
+        } else {
+          toast.error(result?.message || 'Unable to load dashboard profile');
           navigate('/influencer/login');
         }
       } catch (error) {
-        navigate('/influencer/login');
+        if (parsedCachedUser) {
+          applyProfileData(parsedCachedUser);
+          toast.error('Network issue. Showing cached profile.');
+        } else {
+          navigate('/influencer/login');
+        }
       } finally {
         setLoading(false);
       }
@@ -279,6 +392,7 @@ export default function InfluencerDashboard() {
       const phoneValue = parseMaybeNumber(editForm.phone);
       const countryValue = parseMaybeNumber(editForm.country);
       const cityValue = parseMaybeNumber(editForm.city);
+      const priceStartValue = parseMaybeFloat(editForm.price_start);
 
       const profilePayload: Record<string, unknown> = {
         name: editForm.name.trim(),
@@ -306,6 +420,10 @@ export default function InfluencerDashboard() {
         profilePayload.city = editForm.city.trim();
       }
 
+      if (priceStartValue !== undefined) {
+        profilePayload.price_start = priceStartValue;
+      }
+
       const profileResponse = await fetch(`${API_BASE_URL}/influencers/update-profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -317,6 +435,41 @@ export default function InfluencerDashboard() {
         toast.error(profileResult.message || 'Failed to update profile');
         return;
       }
+
+      const platformsPayload = PLATFORM_CONFIG.map((platform) => {
+        const item = platformForm[platform.platformId] || {
+          username: '',
+          profile_url: '',
+          followers: '',
+          engagement_rate: '',
+          total_reach: '',
+        };
+
+        return {
+          platform_id: platform.platformId,
+          username: item.username.trim(),
+          profile_url: item.profile_url.trim(),
+          followers: parseMaybeNumber(item.followers) ?? 0,
+          engagement_rate: parseMaybeFloat(item.engagement_rate) ?? 0,
+          total_reach: item.total_reach.trim(),
+        };
+      }).filter((item) =>
+        item.username || item.profile_url || item.followers > 0 || item.engagement_rate > 0 || item.total_reach
+      );
+
+      if (platformsPayload.length > 0) {
+        const platformsResponse = await fetch(`${API_BASE_URL}/influencers/update-platforms`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ platforms: platformsPayload }),
+        });
+        const platformsResult = await platformsResponse.json();
+        if (!(platformsResult.success || platformsResponse.ok)) {
+          toast.error(platformsResult.message || 'Failed to update influencer platforms');
+          return;
+        }
+      }
+
       await refreshProfile(token);
       setProfileImageFile(null);
       setIsEditing(false);
@@ -330,6 +483,42 @@ export default function InfluencerDashboard() {
     localStorage.removeItem('influencer_token');
     localStorage.removeItem('influencer_user');
     navigate('/');
+  };
+
+  const handleDeleteAccount = async () => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    const confirmed = window.confirm('Are you sure you want to delete your account? This action cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setIsDeletingAccount(true);
+      const response = await fetch(`${API_BASE_URL}/users/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.success || response.ok) {
+        toast.success(result.message || 'Account deleted successfully');
+        localStorage.removeItem('influencer_token');
+        localStorage.removeItem('influencer_user');
+        navigate('/');
+      } else {
+        toast.error(result.message || 'Failed to delete account');
+      }
+    } catch {
+      toast.error('Server error');
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const handleTabChange = (tab: TabType) => {
@@ -405,6 +594,8 @@ export default function InfluencerDashboard() {
   );
   const femalePct = Number(analyticsData.audienceGender.female) || 0;
   const malePct = Number(analyticsData.audienceGender.male) || 0;
+  const otherPct = Number(analyticsData.audienceGender.other) || 0;
+  const joinedDateLabel = getJoinedDateLabel(userData);
   const overviewLocations = analyticsData.audienceLocation.slice(0, 4).map((loc, index) => ({
     country: loc.country || `Location ${index + 1}`,
     pct: Number(loc.percentage) || 0,
@@ -415,25 +606,44 @@ export default function InfluencerDashboard() {
     pct: Number(loc.percentage) || 0,
     color: ['bg-primary', 'bg-primary', 'bg-primary', 'bg-primary'][index] || 'bg-primary',
   }));
+  const profileAgeDistribution = analyticsData.audienceAge.map((age, index) => ({
+    range: age.range || `Range ${index + 1}`,
+    pct: Number(age.percentage) || 0,
+  }));
+  const formatOverviewFollowers = (value: string | number) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '0';
+    if (/[kKmM]$/.test(raw)) return raw.replace('K', 'k').replace('M', 'M');
+    const parsed = Number(raw.replace(/,/g, ''));
+    if (!Number.isFinite(parsed)) return raw;
+    if (parsed >= 1000000) return `${(parsed / 1000000).toFixed(1)}M`;
+    if (parsed >= 1000) return `${Math.round(parsed / 1000)}k`;
+    return String(Math.round(parsed));
+  };
+  const formatOverviewEngagement = (value: string | number) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '0%';
+    return raw.endsWith('%') ? raw : `${raw}%`;
+  };
   const socialPerformanceStats = [
     {
       name: 'Instagram',
-      followers: analyticsData.instagram.followers,
-      engagement: analyticsData.instagram.engagement,
+      followers: formatOverviewFollowers(analyticsData.instagram.followers),
+      engagement: formatOverviewEngagement(analyticsData.instagram.engagement),
       icon: Instagram,
       color: 'from-purple-500 to-pink-500',
     },
     {
       name: 'YouTube',
-      followers: analyticsData.youtube.followers,
-      engagement: analyticsData.youtube.engagement,
+      followers: formatOverviewFollowers(analyticsData.youtube.followers),
+      engagement: formatOverviewEngagement(analyticsData.youtube.engagement),
       icon: Youtube,
       color: 'from-red-600 to-red-500',
     },
     {
       name: 'TikTok',
-      followers: analyticsData.tiktok.followers,
-      engagement: analyticsData.tiktok.engagement,
+      followers: formatOverviewFollowers(analyticsData.tiktok.followers),
+      engagement: formatOverviewEngagement(analyticsData.tiktok.engagement),
       icon: Video,
       color: 'from-gray-700 to-gray-800',
     },
@@ -455,12 +665,11 @@ export default function InfluencerDashboard() {
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'profile', label: 'My Profile', icon: User },
-    { id: 'campaigns', label: 'Campaigns', icon: Briefcase, hasDropdown: true },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'campaigns', label: 'Campaigns', icon: Briefcase },
     { id: 'earnings', label: 'Earnings', icon: DollarSign },
     { id: 'messages', label: 'Messages', icon: MessageSquare, badge: 3 },
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: 7 },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'content', label: 'Content', icon: FileText },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -527,7 +736,6 @@ export default function InfluencerDashboard() {
                 return (
                   <button key={item.id} onClick={() => {
                     handleTabChange(item.id as TabType);
-                    if (item.hasDropdown) setCampaignsExpanded(!campaignsExpanded);
                   }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                       activeTab === item.id ? 'bg-primary text-black font-semibold' : 'text-gray-400 hover:bg-gray-900 hover:text-white'
@@ -538,9 +746,6 @@ export default function InfluencerDashboard() {
                       <span className="w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0">
                         {item.badge}
                       </span>
-                    )}
-                    {item.hasDropdown && (
-                      campaignsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />
                     )}
                   </button>
                 );
@@ -634,9 +839,9 @@ export default function InfluencerDashboard() {
             </div>
             <div className="space-y-3">
               {[
-                { brand: 'Lakmé', logo: '/lakme.png', logoFallback: 'L', logoColor: 'bg-red-100', budget: '₹10,000', desc: 'Beauty Glows Campaign', tags: ['Instagram', 'Reel'], status: 'In Progress', statusColor: 'bg-blue-500/20 text-blue-300' },
-                { brand: 'Nykaa', logo: '', logoFallback: 'N', logoColor: 'bg-pink-500', budget: '₹15,000', desc: 'Summer Glow Edit', tags: ['Instagram', 'Post'], status: 'Approved', statusColor: 'bg-green-500/20 text-green-300' },
-                { brand: 'Mamaearth', logo: '', logoFallback: 'M', logoColor: 'bg-green-600', budget: '₹8,000', desc: 'Skincare Routine Challenge', tags: ['YouTube', 'Video'], status: 'Pending', statusColor: 'bg-yellow-500/20 text-yellow-300' },
+                { brand: 'Lakmé', logo: '/lakme.png', logoFallback: 'L', logoColor: 'bg-red-100', budget: '$10,000', desc: 'Beauty Glows Campaign', tags: ['Instagram', 'Reel'], status: 'In Progress', statusColor: 'bg-blue-500/20 text-blue-300' },
+                { brand: 'Nykaa', logo: '', logoFallback: 'N', logoColor: 'bg-pink-500', budget: '$15,000', desc: 'Summer Glow Edit', tags: ['Instagram', 'Post'], status: 'Approved', statusColor: 'bg-green-500/20 text-green-300' },
+                { brand: 'Mamaearth', logo: '', logoFallback: 'M', logoColor: 'bg-green-600', budget: '$8,000', desc: 'Skincare Routine Challenge', tags: ['YouTube', 'Video'], status: 'Pending', statusColor: 'bg-yellow-500/20 text-yellow-300' },
               ].map((c, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
                   <div className={`w-12 h-12 ${c.logoColor} rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0`}>
@@ -796,9 +1001,17 @@ export default function InfluencerDashboard() {
         <div className="bg-gray-900 rounded-xl p-5 border border-gray-800 text-center">
           {/* Avatar */}
           <div className="relative w-20 h-20 mx-auto mb-3">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black text-3xl font-bold">
-              {userData.name?.[0]?.toUpperCase()}
-            </div>
+            {profileImagePreview || userData.profile_pic ? (
+              <img
+                src={profileImagePreview || userData.profile_pic}
+                alt={userData.name || 'Influencer'}
+                className="w-20 h-20 rounded-full object-cover border-2 border-gray-700"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-black text-3xl font-bold">
+                {userData.name?.[0]?.toUpperCase()}
+              </div>
+            )}
             <button onClick={() => setActiveTab('profile')}
               className="absolute bottom-0 right-0 w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded-full flex items-center justify-center">
               <Edit className="w-3 h-3 text-white" />
@@ -832,7 +1045,7 @@ export default function InfluencerDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <Eye className="w-3 h-3 text-gray-500" />
-              Joined Jan 2024
+              {joinedDateLabel}
             </div>
           </div>
 
@@ -850,25 +1063,6 @@ export default function InfluencerDashboard() {
             </div>
           </div>
 
-          {/* Social Icons */}
-          <div className="flex justify-center gap-2">
-            {[
-              { platformId: 1, icon: Instagram, color: 'from-purple-500 to-pink-500' },
-              { platformId: 2, icon: Youtube, color: 'from-red-600 to-red-500' },
-              { platformId: 3, icon: Video, color: 'from-gray-700 to-gray-800' },
-            ].map((s) => {
-              const Icon = s.icon;
-              const connected = userData.social_accounts?.find((acc: any) => acc.platform_id === s.platformId);
-              return connected ? (
-                <div key={s.platformId} className={`w-9 h-9 rounded-full bg-gradient-to-br ${s.color} flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity`}>
-                  <Icon className="w-4 h-4 text-white" />
-                </div>
-              ) : null;
-            })}
-            <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center cursor-pointer hover:bg-gray-600 transition-colors">
-              <ExternalLink className="w-4 h-4 text-gray-400" />
-            </div>
-          </div>
         </div>
 
         {/* Audience Snapshot */}
@@ -1084,6 +1278,32 @@ export default function InfluencerDashboard() {
                           </p>
                         )}
                       </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Base Price (USD)</label>
+                        {isEditing ? (
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                            <Input
+                              value={editForm.price_start}
+                              onChange={(e) => setEditForm({ ...editForm, price_start: e.target.value })}
+                              className="bg-gray-800 border-gray-700 text-white pl-8"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">
+                            {(userData.price_start != null && userData.price_start !== '')
+                              ? `$${userData.price_start}`
+                              : (userData.base_price != null && userData.base_price !== '')
+                                ? `$${userData.base_price}`
+                                : (editForm.price_start ? `$${editForm.price_start}` : 'Not provided')}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Bio */}
@@ -1151,14 +1371,9 @@ export default function InfluencerDashboard() {
                   <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
                     <h3 className="font-bold text-white mb-4">Social Media Accounts</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {[
-                        { platformId: 1, name: 'Instagram', icon: Instagram, color: 'from-purple-600 to-pink-600' },
-                        { platformId: 3, name: 'TikTok', icon: Video, color: 'from-gray-800 to-gray-700' },
-                        { platformId: 2, name: 'YouTube', icon: Youtube, color: 'from-red-600 to-red-500' },
-                        { platformId: 4, name: 'UGC / Other', icon: Video, color: 'from-primary to-secondary' },
-                      ].map((social) => {
+                      {PLATFORM_CONFIG.map((social) => {
                         const Icon = social.icon;
-                        const account = userData.social_accounts?.find((s: any) => s.platform_id === social.platformId);
+                        const account = userData.social_accounts?.find((s: any) => Number(s.platform_id) === social.platformId);
                         return (
                           <div key={social.platformId} className="flex items-center gap-3 bg-gray-800 rounded-lg p-3">
                             <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${social.color} flex items-center justify-center flex-shrink-0`}>
@@ -1193,15 +1408,18 @@ export default function InfluencerDashboard() {
                             strokeDasharray={`${femalePct} ${Math.max(0, 100 - femalePct)}`} strokeLinecap="round" />
                           <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
                             strokeDasharray={`${malePct} ${Math.max(0, 100 - malePct)}`} strokeDashoffset={`-${femalePct}`} strokeLinecap="round" />
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f59e0b" strokeWidth="3"
+                            strokeDasharray={`${otherPct} ${Math.max(0, 100 - otherPct)}`} strokeDashoffset={`-${femalePct + malePct}`} strokeLinecap="round" />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="text-xs text-gray-400 text-center">Gender</span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex justify-center gap-4 text-sm mb-4">
+                    <div className="flex justify-center gap-4 text-sm mb-4 flex-wrap">
                       <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-purple-500"></div><span className="text-white">{femalePct}% Female</span></div>
                       <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500"></div><span className="text-white">{malePct}% Male</span></div>
+                      <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-amber-500"></div><span className="text-white">{otherPct}% Other</span></div>
                     </div>
                     <h4 className="font-medium text-white text-sm mb-3">Top Locations</h4>
                     {profileLocations.map((loc) => (
@@ -1215,6 +1433,22 @@ export default function InfluencerDashboard() {
                       </div>
                     ))}
                   </div>
+                  <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                    <h3 className="font-bold text-white mb-4">Audience Age</h3>
+                    <div className="space-y-2">
+                      {profileAgeDistribution.map((age) => (
+                        <div key={age.range} className="mb-1">
+                          <div className="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>{age.range}</span>
+                            <span>{age.pct}%</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-700 rounded-full">
+                            <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${age.pct}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -1224,11 +1458,8 @@ export default function InfluencerDashboard() {
           {/* ── CAMPAIGNS TAB ── */}
           {activeTab === 'campaigns' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center mb-6">
                 <h1 className="text-2xl font-bold text-white">Campaigns</h1>
-                <button className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm border border-gray-700">
-                  <Filter className="w-4 h-4" /> Filters
-                </button>
               </div>
 
               {/* Sub tabs */}
@@ -1243,8 +1474,8 @@ export default function InfluencerDashboard() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 space-y-3">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-3">
                   {mockCampaigns.filter(c =>
                     campaignsSubTab === 'available' ? c.status === 'available' :
                     campaignsSubTab === 'applied' ? c.status === 'applied' :
@@ -1302,7 +1533,8 @@ export default function InfluencerDashboard() {
                   )}
                 </div>
 
-                {/* Rate Card + Audience sidebar */}
+                {/* Rate Card + Audience sidebar hidden for now */}
+                {false && (
                 <div className="space-y-4">
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <h3 className="font-bold text-white mb-3">Rate Card</h3>
@@ -1343,6 +1575,7 @@ export default function InfluencerDashboard() {
                     ))}
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1520,18 +1753,6 @@ export default function InfluencerDashboard() {
             <InfluencerAnalytics />
           )}
 
-          {/* ── CONTENT TAB ── */}
-          {activeTab === 'content' && (
-            <div>
-              <h1 className="text-2xl font-bold text-white mb-6">Content Submissions</h1>
-              <div className="bg-gray-900 rounded-xl p-12 border border-gray-800 text-center">
-                <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-white font-medium mb-2">No content submissions yet</p>
-                <p className="text-gray-400 text-sm">Your content submissions for campaigns will appear here</p>
-              </div>
-            </div>
-          )}
-
           {/* ── SETTINGS TAB ── */}
           {activeTab === 'settings' && (
             <div>
@@ -1580,8 +1801,12 @@ export default function InfluencerDashboard() {
                 <div className="bg-gray-900 rounded-xl p-6 border border-red-900">
                   <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2">⚠️ Danger Zone</h3>
                   <p className="text-gray-400 text-sm mb-4">Permanent actions cannot be undone.</p>
-                  <button className="bg-red-950 border border-red-700 text-red-400 hover:bg-red-900 font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors w-full">
-                    Delete Account
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={isDeletingAccount}
+                    className="bg-red-950 border border-red-700 text-red-400 hover:bg-red-900 font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors w-full disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
                   </button>
                 </div>
               </div>
@@ -1667,8 +1892,8 @@ export default function InfluencerDashboard() {
             {[
               { id: 'overview', label: 'Home', icon: LayoutDashboard },
               { id: 'profile', label: 'Profile', icon: User },
+              { id: 'analytics', label: 'Analytics', icon: BarChart3 },
               { id: 'campaigns', label: 'Campaigns', icon: Briefcase },
-              { id: 'messages', label: 'Messages', icon: MessageSquare },
               { id: 'settings', label: 'Settings', icon: Settings },
             ].map((item) => {
               const Icon = item.icon;

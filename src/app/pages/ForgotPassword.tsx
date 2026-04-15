@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Mail, ArrowLeft, CheckCircle, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { toast } from 'sonner';
+import { API_BASE_URL } from '../../services/api';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -19,11 +21,29 @@ export function ForgotPassword() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call to send reset email
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          type: userType,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success || response.ok) {
+        setIsSubmitted(true);
+      } else {
+        toast.error(result.message || 'Failed to send reset link');
+      }
+    } catch {
+      toast.error('Server error');
+    } finally {
       setIsLoading(false);
-      setIsSubmitted(true);
-    }, 1500);
+    }
   };
 
   const handleBackToLogin = () => {
