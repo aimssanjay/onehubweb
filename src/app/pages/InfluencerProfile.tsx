@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { 
   MapPin, 
   Instagram, 
@@ -21,16 +21,528 @@ import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { influencers } from '../../data/mockData';
+import { influencers, type Influencer } from '../../data/mockData';
+import { API_BASE_URL } from '../../services/api';
+
+interface PublicProfileResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+interface AudienceLocationItem {
+  country: string;
+  code: string;
+  percentage: number;
+}
+
+interface AudienceAgeItem {
+  range: string;
+  percentage: number;
+}
+
+interface AudienceGenderData {
+  female: number;
+  male: number;
+  other: number;
+}
+
+interface ProfileAnalyticsData {
+  audienceLocation: AudienceLocationItem[];
+  audienceAge: AudienceAgeItem[];
+  audienceGender: AudienceGenderData;
+  avgViews: number;
+}
+
+const DEFAULT_AUDIENCE_AGE: AudienceAgeItem[] = [
+  { range: '13-17', percentage: 0 },
+  { range: '18-24', percentage: 0 },
+  { range: '25-34', percentage: 0 },
+  { range: '35-44', percentage: 0 },
+  { range: '45-64', percentage: 0 },
+  { range: '65+', percentage: 0 },
+];
+
+const DEFAULT_AUDIENCE_GENDER: AudienceGenderData = {
+  female: 0,
+  male: 0,
+  other: 0,
+};
+
+const INSTAGRAM_PLATFORM_IDS = new Set([1]);
+
+function createDefaultAnalytics(): ProfileAnalyticsData {
+  return {
+    audienceLocation: [],
+    audienceAge: [...DEFAULT_AUDIENCE_AGE],
+    audienceGender: { ...DEFAULT_AUDIENCE_GENDER },
+    avgViews: 0,
+  };
+}
+
+function parseNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  if (typeof value === 'string') {
+    const raw = value.trim().toLowerCase().replace(/,/g, '').replace(/%/g, '');
+    if (!raw) return fallback;
+    const multiplier = raw.endsWith('k') ? 1_000 : raw.endsWith('m') ? 1_000_000 : 1;
+    const numericPart = multiplier === 1 ? raw : raw.slice(0, -1);
+    const parsed = Number(numericPart);
+    return Number.isFinite(parsed) ? parsed * multiplier : fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizePlatformName(name: unknown) {
+  return String(name ?? '').trim().toLowerCase();
+}
+
+function parseJsonSafely(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function toArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (
+      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+      (trimmed.startsWith('{') && trimmed.endsWith('}'))
+    ) {
+      const parsed = parseJsonSafely(trimmed);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
+    }
+  }
+  if (value && typeof value === 'object') return [value];
+  return [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = parseJsonSafely(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function toPercentage(value: unknown, fallback = 0): number {
+  const parsed = parseNumber(value, fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function formatPercent(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
+function toSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function isNumericLike(value: string): boolean {
+  return /^[0-9]+$/.test(value.trim());
+}
+
+function collectSlugCandidates(
+  routeValue: string,
+  stateInfluencer: Influencer | null,
+  fallbackInfluencer: Influencer | undefined
+): string[] {
+  const candidates = [
+    routeValue,
+    stateInfluencer?.slug,
+    stateInfluencer?.username?.replace(/^@/, ''),
+    stateInfluencer?.name ? toSlug(stateInfluencer.name) : '',
+    fallbackInfluencer?.slug,
+    fallbackInfluencer?.username?.replace(/^@/, ''),
+    fallbackInfluencer?.name ? toSlug(fallbackInfluencer.name) : '',
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+
+  const deduped = Array.from(new Set(candidates));
+  const nonNumeric = deduped.filter((item) => !isNumericLike(item));
+  const numeric = deduped.filter((item) => isNumericLike(item));
+
+  return [...nonNumeric, ...numeric];
+}
+
+function collectIdentityCandidatesFromProfile(row: Record<string, unknown>): string[] {
+  const user = asRecord(row.user);
+  const influencer = asRecord(row.influencer);
+  const candidates = [
+    row.slug,
+    row.username,
+    row.handle,
+    row.name ? toSlug(String(row.name)) : '',
+    row.id,
+    row.user_id,
+    row.influencer_id,
+    user?.slug,
+    user?.username,
+    user?.name ? toSlug(String(user.name)) : '',
+    user?.id,
+    influencer?.slug,
+    influencer?.username,
+    influencer?.name ? toSlug(String(influencer.name)) : '',
+    influencer?.id,
+  ]
+    .map((item) => String(item ?? '').replace(/^@/, '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(candidates));
+}
+
+function extractProfilePayload(resultData: unknown): Record<string, unknown> {
+  const rawData = (
+    (resultData && typeof resultData === 'object' && !Array.isArray(resultData) && resultData) ||
+    (Array.isArray(resultData) && resultData.length > 0 && typeof resultData[0] === 'object' && resultData[0]) ||
+    {}
+  ) as Record<string, unknown>;
+  const profileData =
+    (rawData.influencer && typeof rawData.influencer === 'object' ? rawData.influencer : null) ||
+    (rawData.profile && typeof rawData.profile === 'object' ? rawData.profile : null) ||
+    rawData;
+  return (profileData && typeof profileData === 'object'
+    ? profileData
+    : {}) as Record<string, unknown>;
+}
+
+function normalizeAgeRange(range: string): string {
+  return range.replace(/\s+/g, '').toLowerCase();
+}
+
+function getCountryCode(country: string, providedCode: unknown): string {
+  const provided = String(providedCode ?? '').trim();
+  if (provided) return provided.toUpperCase();
+  const words = country
+    .split(' ')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return country.slice(0, 2).toUpperCase() || 'NA';
+}
+
+function extractAnalyticsFromProfile(
+  profile: Record<string, unknown>,
+  root: Record<string, unknown>
+): ProfileAnalyticsData {
+  const analytics = createDefaultAnalytics();
+
+  const audienceLocationsRaw =
+    profile.influencer_audience_locations ??
+    profile.audience_locations ??
+    profile.audienceLocation ??
+    root.influencer_audience_locations ??
+    root.audience_locations ??
+    root.audienceLocation;
+  const audienceLocations = toArray(audienceLocationsRaw);
+
+  if (audienceLocations.length > 0) {
+    const mapped = audienceLocations
+      .map((item) => {
+        const location = asRecord(item);
+        if (!location) return null;
+        const country = String(location.country ?? location.location ?? '').trim();
+        if (!country) return null;
+        return {
+          country,
+          code: getCountryCode(country, location.code ?? location.country_code),
+          percentage: toPercentage(location.percentage, 0),
+        };
+      })
+      .filter((item): item is AudienceLocationItem => !!item);
+
+    if (mapped.length > 0) {
+      analytics.audienceLocation = mapped;
+    } else {
+      const mapObject = asRecord(audienceLocationsRaw);
+      if (mapObject) {
+        analytics.audienceLocation = Object.entries(mapObject)
+          .map(([country, percentage]) => ({
+            country,
+            code: getCountryCode(country, ''),
+            percentage: toPercentage(percentage, 0),
+          }))
+          .filter((item) => item.country.trim().length > 0);
+      }
+    }
+  }
+
+  const audienceAgeRaw =
+    profile.influencer_audience_ages ??
+    profile.audience_age ??
+    profile.audienceAge ??
+    root.influencer_audience_ages ??
+    root.audience_age ??
+    root.audienceAge;
+  const audienceAge = toArray(audienceAgeRaw);
+
+  if (audienceAge.length > 0) {
+    const ageMap = new Map<string, number>();
+    audienceAge.forEach((item) => {
+      const ageItem = asRecord(item);
+      if (!ageItem) return;
+      const range = String(ageItem.age_range ?? ageItem.range ?? '').trim();
+      if (!range) return;
+      ageMap.set(normalizeAgeRange(range), toPercentage(ageItem.percentage, 0));
+    });
+
+    analytics.audienceAge = DEFAULT_AUDIENCE_AGE.map((defaultAge) => ({
+      ...defaultAge,
+      percentage: ageMap.get(normalizeAgeRange(defaultAge.range)) ?? 0,
+    }));
+  } else {
+    const mapObject = asRecord(audienceAgeRaw);
+    if (mapObject) {
+      const ageMap = new Map<string, number>();
+      Object.entries(mapObject).forEach(([range, value]) => {
+        ageMap.set(normalizeAgeRange(range), toPercentage(value, 0));
+      });
+      analytics.audienceAge = DEFAULT_AUDIENCE_AGE.map((defaultAge) => ({
+        ...defaultAge,
+        percentage: ageMap.get(normalizeAgeRange(defaultAge.range)) ?? 0,
+      }));
+    }
+  }
+
+  const audienceGenderRaw =
+    profile.influencer_audience_genders ||
+    profile.audience_gender ||
+    profile.audienceGender ||
+    root.influencer_audience_genders ||
+    root.audience_gender ||
+    root.audienceGender;
+  const audienceGender = asRecord(audienceGenderRaw);
+
+  if (audienceGender) {
+    analytics.audienceGender = {
+      female: toPercentage(audienceGender.female, DEFAULT_AUDIENCE_GENDER.female),
+      male: toPercentage(audienceGender.male, DEFAULT_AUDIENCE_GENDER.male),
+      other: toPercentage(audienceGender.other, DEFAULT_AUDIENCE_GENDER.other),
+    };
+  } else if (Array.isArray(audienceGenderRaw)) {
+    const genderData: AudienceGenderData = { ...DEFAULT_AUDIENCE_GENDER };
+    audienceGenderRaw.forEach((entry) => {
+      const item = asRecord(entry);
+      if (!item) return;
+      const directFemale = toPercentage(item.female, NaN);
+      const directMale = toPercentage(item.male, NaN);
+      const directOther = toPercentage(item.other, NaN);
+      if (Number.isFinite(directFemale)) genderData.female = directFemale;
+      if (Number.isFinite(directMale)) genderData.male = directMale;
+      if (Number.isFinite(directOther)) genderData.other = directOther;
+      const key = String(item.gender ?? item.name ?? '').toLowerCase();
+      const value = toPercentage(item.percentage ?? item.value, 0);
+      if (key.includes('female')) genderData.female = value;
+      if (key.includes('male')) genderData.male = value;
+      if (key.includes('other')) genderData.other = value;
+    });
+    analytics.audienceGender = genderData;
+  }
+
+  const socialAccounts =
+    toArray(profile.influencer_social_accounts).length > 0
+      ? toArray(profile.influencer_social_accounts)
+      : toArray(profile.social_accounts).length > 0
+        ? toArray(profile.social_accounts)
+        : toArray(root.influencer_social_accounts).length > 0
+          ? toArray(root.influencer_social_accounts)
+          : toArray(root.social_accounts);
+  if (socialAccounts.length > 0) {
+    let fallbackViews = 0;
+    for (const accountItem of socialAccounts) {
+      const account = asRecord(accountItem);
+      if (!account) continue;
+      const platformName = normalizePlatformName(
+        account.platform_name || account.name
+      );
+      const platformId = parseNumber(account.platform_id, 0);
+      const views = parseNumber(
+        account.total_reach ?? account.avg_views ?? account.average_views ?? account.views,
+        0
+      );
+      if (views > 0 && fallbackViews === 0) fallbackViews = views;
+      if (views > 0 && (platformName.includes('instagram') || INSTAGRAM_PLATFORM_IDS.has(platformId))) {
+        analytics.avgViews = views;
+        break;
+      }
+    }
+    if (analytics.avgViews === 0) analytics.avgViews = fallbackViews;
+  }
+
+  if (analytics.avgViews === 0) {
+    analytics.avgViews = parseNumber(
+      profile.avg_views ??
+        profile.average_views ??
+        profile.total_reach ??
+        root.avg_views ??
+        root.average_views ??
+        root.total_reach,
+      0
+    );
+  }
+
+  return analytics;
+}
+
+function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: Influencer): Influencer {
+  const name = String(row.name || row.full_name || fallback?.name || 'Influencer');
+  const slug = String(
+    row.slug ||
+    row.public_slug ||
+    row.profile_slug ||
+    row.creator_slug ||
+    row.user_slug ||
+    row.username ||
+    row.handle ||
+    fallback?.slug ||
+    toSlug(name) ||
+    fallback?.id ||
+    ''
+  ).replace(/^@/, '').trim();
+  const usernameRaw = String(row.username || row.handle || slug || fallback?.username || name.toLowerCase().replace(/\s+/g, ''));
+  const username = usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
+  const profileImage = String(
+    row.profile_pic ||
+      row.profile_image ||
+      fallback?.profileImage ||
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
+  );
+  const coverImage = String(row.cover_image || fallback?.coverImage || profileImage);
+  const city = String(row.city_name || row.city || '').trim();
+  const country = String(row.country_name || row.country || '').trim();
+  const location = [city, country].filter(Boolean).join(', ') || fallback?.location || 'Not specified';
+  const categories = Array.isArray(row.categories)
+    ? row.categories.map((item) => String(item)).filter(Boolean)
+    : fallback?.categories || [];
+  const category = String(
+    row.category_name ||
+      row.category ||
+      categories[0] ||
+      fallback?.category ||
+      'General'
+  );
+
+  const platforms: Influencer['platforms'] = {
+    instagram: parseNumber(row.instagram_followers, fallback?.platforms.instagram || 0),
+    youtube: parseNumber(row.youtube_followers, fallback?.platforms.youtube || 0),
+    tiktok: parseNumber(row.tiktok_followers, fallback?.platforms.tiktok || 0),
+  };
+
+  const rawPlatforms =
+    toArray(row.platforms).length > 0
+      ? toArray(row.platforms)
+      : toArray(row.influencer_social_accounts).length > 0
+        ? toArray(row.influencer_social_accounts)
+      : toArray(row.social_accounts).length > 0
+        ? toArray(row.social_accounts)
+        : toArray(row.platform_accounts).length > 0
+          ? toArray(row.platform_accounts)
+          : toArray(row.influencer_platforms);
+  if (rawPlatforms.length > 0) {
+    rawPlatforms.forEach((platformItem) => {
+      if (!platformItem || typeof platformItem !== 'object') return;
+      const item = platformItem as Record<string, unknown>;
+      const platformName = normalizePlatformName(item.platform_name || item.name);
+      const followers = parseNumber(
+        item.followers ??
+          item.follower_count ??
+          item.followers_count ??
+          item.total_followers,
+        0
+      );
+      if (platformName.includes('instagram')) platforms.instagram = followers;
+      if (platformName.includes('youtube')) platforms.youtube = followers;
+      if (platformName.includes('tiktok')) platforms.tiktok = followers;
+    });
+  }
+
+  return {
+    id: String(row.id || row.user_id || row.influencer_id || fallback?.id || slug || 'public-profile'),
+    slug,
+    name,
+    username,
+    category,
+    categories: categories.length > 0 ? categories : [category],
+    location,
+    bio: String(row.bio || fallback?.bio || ''),
+    profileImage,
+    coverImage,
+    verified: Boolean(row.is_verified ?? fallback?.verified),
+    featured: Boolean(row.is_featured ?? fallback?.featured),
+    platforms,
+    startingPrice: parseNumber(row.price_start ?? row.base_price, fallback?.startingPrice || 0),
+    packages: Array.isArray(fallback?.packages) ? fallback.packages : [],
+    portfolio: Array.isArray(fallback?.portfolio) ? fallback.portfolio : [],
+    rating: parseNumber(row.rating, fallback?.rating || 4.5),
+    totalOrders: parseNumber(row.total_orders, fallback?.totalOrders || 0),
+    engagement: String(
+      row.engagement_rate ??
+        row.engagement ??
+        row.avg_engagement ??
+        fallback?.engagement ??
+        ''
+    ),
+  };
+}
 
 export function InfluencerProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const locationState = useLocation();
   const [selectedPackage, setSelectedPackage] = useState('package-1');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  
-  const influencer = influencers.find((inf) => inf.id === id);
+  const stateInfluencer = ((locationState.state as { influencer?: Influencer } | null)?.influencer) || null;
+  const stateRawProfile = asRecord(stateInfluencer?.rawApiData);
+  const [influencer, setInfluencer] = useState<Influencer | null>(stateInfluencer);
+  const [analyticsData, setAnalyticsData] = useState<ProfileAnalyticsData>(createDefaultAnalytics());
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
+  const routeValue = String(id || '').trim();
+  const fallbackInfluencer = influencers.find(
+    (inf) =>
+      inf.id === routeValue ||
+      inf.slug === routeValue ||
+      inf.username.replace(/^@/, '') === routeValue
+  );
+
+  useEffect(() => {
+    if (!influencer) return;
+    if (!routeValue || !isNumericLike(routeValue)) return;
+    const normalizedSlug = String(influencer.slug || '').trim();
+    if (!normalizedSlug || isNumericLike(normalizedSlug)) return;
+    navigate(`/influencer/${normalizedSlug}`, { replace: true, state: { influencer } });
+  }, [influencer, routeValue, navigate]);
+
+  useEffect(() => {
+    if (!influencer && (stateInfluencer || fallbackInfluencer)) {
+      setInfluencer(stateInfluencer || fallbackInfluencer || null);
+    }
+  }, [stateInfluencer, fallbackInfluencer, influencer]);
 
   // Scroll to top when component mounts or ID changes
   useEffect(() => {
@@ -47,11 +559,106 @@ export function InfluencerProfile() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const fetchPublicProfile = async () => {
+      if (!routeValue) return;
+      setIsLoadingProfile(true);
+      setProfileError('');
+      setAnalyticsData(
+        stateRawProfile ? extractAnalyticsFromProfile(stateRawProfile, stateRawProfile) : createDefaultAnalytics()
+      );
+
+      try {
+        const authToken =
+          localStorage.getItem('influencer_token') ||
+          localStorage.getItem('brand_token') ||
+          localStorage.getItem('token');
+        const candidates = collectSlugCandidates(routeValue, stateInfluencer, fallbackInfluencer);
+        let lastErrorMessage = 'Failed to load influencer public profile';
+        let resolved = false;
+
+        for (const candidate of candidates) {
+          // Try POST first as documented, fallback to GET query param if backend expects GET.
+          const postResponse = await fetch(`${API_BASE_URL}/influencers/public-profile`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            },
+            body: JSON.stringify({ slug: candidate }),
+          });
+
+          let response = postResponse;
+          let result: PublicProfileResponse = await postResponse.json();
+
+          if (!postResponse.ok) {
+            const getResponse = await fetch(
+              `${API_BASE_URL}/influencers/public-profile?slug=${encodeURIComponent(candidate)}`,
+              {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+              }
+            );
+            response = getResponse;
+            result = await getResponse.json();
+          }
+
+          if (!response.ok) {
+            lastErrorMessage = result?.message || lastErrorMessage;
+            continue;
+          }
+
+          const rawData = (
+            (result?.data && typeof result.data === 'object' && !Array.isArray(result.data) && result.data) ||
+            (Array.isArray(result?.data) && result.data.length > 0 && typeof result.data[0] === 'object' && result.data[0]) ||
+            {}
+          ) as Record<string, unknown>;
+          const safeProfileData = extractProfilePayload(result?.data);
+
+          setInfluencer(mapPublicProfileToInfluencer(safeProfileData, fallbackInfluencer));
+          setAnalyticsData(extractAnalyticsFromProfile(safeProfileData, rawData));
+          setProfileError('');
+          resolved = true;
+          break;
+        }
+
+        if (!resolved) {
+          if (stateRawProfile) {
+            setAnalyticsData(extractAnalyticsFromProfile(stateRawProfile, stateRawProfile));
+            setProfileError('');
+          } else {
+            throw new Error(lastErrorMessage);
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to load profile';
+        if (stateInfluencer || fallbackInfluencer) {
+          setInfluencer(stateInfluencer || fallbackInfluencer || null);
+          setProfileError('');
+        } else {
+          setInfluencer(null);
+          setProfileError(message);
+        }
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    fetchPublicProfile();
+  }, [routeValue, stateInfluencer, fallbackInfluencer, stateRawProfile]);
+
+  if (isLoadingProfile && !influencer) {
+    return <div className="min-h-screen flex items-center justify-center bg-white text-gray-600">Loading profile...</div>;
+  }
+
   if (!influencer) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <Card className="p-8 text-center bg-white border border-gray-200">
-          <p className="text-gray-600 mb-4">Influencer not found</p>
+          <p className="text-gray-600 mb-4">{profileError || 'Influencer not found'}</p>
           <Button onClick={() => navigate('/browse')} className="bg-primary hover:bg-secondary text-black">
             Back to Browse
           </Button>
@@ -67,7 +674,8 @@ export function InfluencerProfile() {
   };
 
   const totalFollowers = Object.values(influencer.platforms).reduce((a, b) => a + b, 0);
-  const engagementRate = 'N/A';
+  const engagementRate = influencer.engagement ? `${influencer.engagement}%` : 'N/A';
+  const avgViewsLabel = analyticsData.avgViews > 0 ? formatFollowers(analyticsData.avgViews) : 'N/A';
 
   // Mock portfolio images for carousel
   const portfolioImages = [
@@ -76,23 +684,22 @@ export function InfluencerProfile() {
     influencer.portfolio[0]?.url || influencer.profileImage,
     influencer.portfolio[1]?.url || influencer.profileImage,
   ];
-
-  // Mock data for analytics
-  const audienceLocationData = [
-    { country: 'United States', code: 'US', percentage: 51 },
-    { country: 'Canada', code: 'CA', percentage: 18 },
-    { country: 'United Kingdom', code: 'GB', percentage: 3 },
-    { country: 'Other', code: 'Other', percentage: 13 },
-  ];
-
-  const audienceAgeData = [
-    { range: '13-17', percentage: 3 },
-    { range: '18-24', percentage: 29 },
-    { range: '25-34', percentage: 46 },
-    { range: '35-44', percentage: 17 },
-    { range: '45-64', percentage: 6 },
-    { range: '65+', percentage: 0 },
-  ];
+  const audienceLocationData = analyticsData.audienceLocation;
+  const audienceAgeData = analyticsData.audienceAge;
+  const genderData = analyticsData.audienceGender;
+  const totalGenderValue = Math.max(genderData.female + genderData.male + genderData.other, 1);
+  const genderSegments = [
+    { label: 'Female', value: genderData.female, color: '#93C5FD' },
+    { label: 'Male', value: genderData.male, color: '#D1D5DB' },
+    { label: 'Other', value: genderData.other, color: '#9CA3AF' },
+  ]
+    .filter((item) => item.value > 0)
+    .map((item) => ({
+      ...item,
+      percentage: (item.value / totalGenderValue) * 100,
+    }));
+  const donutRadius = 40;
+  const donutCircumference = 2 * Math.PI * donutRadius;
 
   const reviews = [
     {
@@ -121,7 +728,7 @@ export function InfluencerProfile() {
     },
   ];
 
-  const similarInfluencers = influencers.filter(inf => inf.id !== id).slice(0, 3);
+  const similarInfluencers = influencers.filter((inf) => inf.id !== influencer.id).slice(0, 3);
 
   const handlePrevImage = () => {
     setCurrentImageIndex((prev) => (prev === 0 ? portfolioImages.length - 1 : prev - 1));
@@ -132,7 +739,7 @@ export function InfluencerProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-24 md:pb-0">
+    <div className="min-h-screen bg-white pb-24 md:pb-0 [&_button]:cursor-pointer [&_a]:cursor-pointer [&_label]:cursor-pointer [&_[role='button']]:cursor-pointer [&_select]:cursor-pointer">
       {/* Mobile Header */}
       <div className="sticky top-0 z-50 bg-white border-b border-gray-200 md:relative md:border-0">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -487,7 +1094,7 @@ export function InfluencerProfile() {
                       <div className="text-xs md:text-sm text-gray-600">Followers</div>
                     </div>
                     <div className="text-center md:text-left">
-                      <div className="text-xl md:text-3xl font-bold text-gray-900 mb-1">5.2k</div>
+                      <div className="text-xl md:text-3xl font-bold text-gray-900 mb-1">{avgViewsLabel}</div>
                       <div className="text-xs md:text-sm text-gray-600">Avg Views</div>
                     </div>
                     <div className="text-center md:text-left">
@@ -509,12 +1116,12 @@ export function InfluencerProfile() {
                                 <span className="text-gray-500 uppercase text-xs mr-1">{location.code}</span>
                                 {location.country}
                               </span>
-                              <span className="font-semibold text-gray-900">{location.percentage}%</span>
+                              <span className="font-semibold text-gray-900">{formatPercent(location.percentage)}</span>
                             </div>
                             <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-blue-500 rounded-full transition-all"
-                                style={{ width: `${location.percentage}%` }}
+                                style={{ width: `${toPercentage(location.percentage)}%` }}
                               />
                             </div>
                           </div>
@@ -529,12 +1136,12 @@ export function InfluencerProfile() {
                         {audienceAgeData.map((age) => (
                           <div key={age.range} className="flex-1 flex flex-col items-center h-full">
                             <div className="text-xs font-semibold text-gray-900 mb-2 order-1">
-                              {age.percentage}%
+                              {formatPercent(age.percentage)}
                             </div>
                             <div className="w-full bg-gray-200 rounded-t-lg relative flex-1 order-2">
                               <div
                                 className="w-full bg-blue-400 rounded-t-lg absolute bottom-0"
-                                style={{ height: `${age.percentage}%` }}
+                                style={{ height: `${toPercentage(age.percentage)}%` }}
                               />
                             </div>
                             <div className="text-xs text-gray-600 mt-2 order-3">{age.range}</div>
@@ -551,41 +1158,48 @@ export function InfluencerProfile() {
                       {/* Donut Chart */}
                       <div className="relative w-32 h-32 flex-shrink-0">
                         <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                          {/* Female (55%) - Blue */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            fill="none"
-                            stroke="#93C5FD"
-                            strokeWidth="20"
-                            strokeDasharray={`${55 * 2.51} ${(100 - 55) * 2.51}`}
-                          />
-                          {/* Male (45%) - Gray */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            fill="none"
-                            stroke="#E5E7EB"
-                            strokeWidth="20"
-                            strokeDasharray={`${45 * 2.51} ${(100 - 45) * 2.51}`}
-                            strokeDashoffset={`${-55 * 2.51}`}
-                          />
+                          {genderSegments.length === 0 && (
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r={donutRadius}
+                              fill="none"
+                              stroke="#D1D5DB"
+                              strokeWidth="20"
+                            />
+                          )}
+                          {genderSegments.map((segment, index) => {
+                            const previousPercentage = genderSegments
+                              .slice(0, index)
+                              .reduce((total, item) => total + item.percentage, 0);
+                            return (
+                              <circle
+                                key={segment.label}
+                                cx="50"
+                                cy="50"
+                                r={donutRadius}
+                                fill="none"
+                                stroke={segment.color}
+                                strokeWidth="20"
+                                strokeDasharray={`${(segment.percentage / 100) * donutCircumference} ${donutCircumference}`}
+                                strokeDashoffset={`${-(previousPercentage / 100) * donutCircumference}`}
+                              />
+                            );
+                          })}
                         </svg>
                       </div>
                       {/* Legend */}
                       <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-blue-300 flex-shrink-0" />
-                          <span className="text-sm text-gray-700">Female</span>
-                          <span className="text-sm font-semibold text-gray-900">55%</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-gray-300 flex-shrink-0" />
-                          <span className="text-sm text-gray-700">Male</span>
-                          <span className="text-sm font-semibold text-gray-900">45%</span>
-                        </div>
+                        {genderSegments.map((segment) => (
+                          <div key={segment.label} className="flex items-center gap-3">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: segment.color }}
+                            />
+                            <span className="text-sm text-gray-700">{segment.label}</span>
+                            <span className="text-sm font-semibold text-gray-900">{formatPercent(segment.value)}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -679,7 +1293,7 @@ export function InfluencerProfile() {
                       <div 
                         key={inf.id} 
                         className="cursor-pointer group"
-                        onClick={() => navigate(`/profile/${inf.id}`)}
+                        onClick={() => navigate(`/influencer/${inf.slug || inf.id}`)}
                       >
                         <div className="aspect-[3/4] rounded-lg overflow-hidden mb-3">
                           <img

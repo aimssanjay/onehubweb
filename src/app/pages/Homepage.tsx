@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
@@ -28,7 +28,7 @@ export function Homepage() {
   // Navigation helper to match old onNavigate signature
   const onNavigate = (page: string, data?: any) => {
     if (page === 'profile' && data?.id) {
-      navigate(`/profile/${data.id}`);
+      navigate(`/influencer/${data.id}`);
     } else if (page === 'browse') {
       if (data) {
         navigate('/browse', { state: data });

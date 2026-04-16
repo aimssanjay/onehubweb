@@ -2,6 +2,7 @@
 
 export interface Influencer {
   id: string;
+  slug?: string;
   name: string;
   username: string;
   category: string;
@@ -22,6 +23,8 @@ export interface Influencer {
   portfolio: PortfolioItem[];
   rating: number;
   totalOrders: number;
+  engagement?: string;
+  rawApiData?: Record<string, unknown>;
 }
 
 export interface Package {

@@ -80,6 +80,15 @@ function normalizePlatformName(name: string) {
   return name.trim().toLowerCase();
 }
 
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
 function hasExplicitPaginationMeta(data: Record<string, unknown>) {
   const meta = (data.pagination as Record<string, unknown>) || (data.meta as Record<string, unknown>) || {};
   return Boolean(
@@ -471,9 +480,23 @@ export function InfluencerListing() {
     );
     const rating = parseNumber(row.rating, 4.5);
     const id = String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`);
+    const slug = String(
+      row.slug ||
+      row.influencer_slug ||
+      row.public_slug ||
+      row.profile_slug ||
+      row.creator_slug ||
+      row.user_slug ||
+      (row.user && typeof row.user === 'object' ? (row.user as Record<string, unknown>).slug : undefined) ||
+      row.username ||
+      row.handle ||
+      toSlug(name) ||
+      id
+    ).replace(/^@/, '').trim();
 
     return {
       id,
+      slug,
       name,
       username,
       category,
@@ -491,6 +514,7 @@ export function InfluencerListing() {
       rating,
       totalOrders: parseNumber(row.total_orders, 0),
       engagement: engagement > 0 ? engagement.toFixed(1) : undefined,
+      rawApiData: row,
     };
   };
 
@@ -886,7 +910,7 @@ export function InfluencerListing() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background [&_button]:cursor-pointer [&_a]:cursor-pointer [&_label]:cursor-pointer [&_[role='button']]:cursor-pointer">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Header */}
         <div className="mb-6 lg:mb-8">
@@ -1039,7 +1063,11 @@ export function InfluencerListing() {
                 <UnifiedInfluencerCard
                   key={influencer.id}
                   influencer={influencer}
-                  onViewProfile={(id) => navigate(`/profile/${id}`)}
+                  onViewProfile={(slugOrId) =>
+                    navigate(`/influencer/${slugOrId}`, {
+                      state: { influencer },
+                    })
+                  }
                 />
               ))}
             </div>

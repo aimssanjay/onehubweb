@@ -4,7 +4,7 @@ import type { Influencer } from '../../data/mockData';
 
 interface UnifiedInfluencerCardProps {
   influencer: Influencer;
-  onViewProfile: (id: string) => void;
+  onViewProfile: (slugOrId: string) => void;
 }
 
 export function UnifiedInfluencerCard({ influencer, onViewProfile }: UnifiedInfluencerCardProps) {
@@ -23,7 +23,7 @@ export function UnifiedInfluencerCard({ influencer, onViewProfile }: UnifiedInfl
 
   return (
     <Card 
-      onClick={() => onViewProfile(influencer.id)}
+      onClick={() => onViewProfile(influencer.slug || influencer.id)}
       className="overflow-hidden transition-all duration-300 hover:shadow-xl border-zinc-200 bg-white group cursor-pointer w-full mx-auto text-card-foreground flex flex-col gap-0"
     >
       {/* Profile Image with Overlays */}
