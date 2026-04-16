@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Logo } from './Logo';
 import { useEffect, useState, useRef } from 'react';
+import { clearInfluencerClientData } from '../utils/influencerStorage';
 
 import { ChevronDown, LayoutDashboard, User, LogOut, Settings } from 'lucide-react';
 
@@ -11,6 +12,7 @@ export function Navbar() {
   const [influencerUser, setInfluencerUser] = useState<any>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const syncUsers = () => {
@@ -44,6 +46,28 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const openDropdown = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setDropdownOpen(true);
+  };
+
+  const closeDropdownWithDelay = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setDropdownOpen(false);
+      closeTimerRef.current = null;
+    }, 180);
+  };
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
@@ -58,14 +82,15 @@ export function Navbar() {
     localStorage.removeItem('brand_user');
     setBrandUser(null);
     setDropdownOpen(false);
+    window.dispatchEvent(new Event('auth-state-changed'));
     navigate('/');
   };
 
   const handleInfluencerLogout = () => {
-    localStorage.removeItem('influencer_token');
-    localStorage.removeItem('influencer_user');
+    clearInfluencerClientData();
     setInfluencerUser(null);
     setDropdownOpen(false);
+    window.dispatchEvent(new Event('auth-state-changed'));
     navigate('/');
   };
 
@@ -120,8 +145,8 @@ export function Navbar() {
               <div
                 className="relative"
                 ref={dropdownRef}
-                onMouseEnter={() => setDropdownOpen(true)}
-                onMouseLeave={() => setDropdownOpen(false)}
+                onMouseEnter={openDropdown}
+                onMouseLeave={closeDropdownWithDelay}
               >
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -146,7 +171,11 @@ export function Navbar() {
 
                 {/* Dropdown */}
                 {dropdownOpen && (
-                  <div className="absolute right-0 top-12 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-2 overflow-hidden">
+                  <div
+                    className="absolute right-0 top-full w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-2 overflow-hidden"
+                    onMouseEnter={openDropdown}
+                    onMouseLeave={closeDropdownWithDelay}
+                  >
                     {/* User Info */}
                     <div className="px-4 py-3 border-b border-gray-100">
                       <p className="font-semibold text-gray-900 text-sm">{loggedInUser?.name}</p>
@@ -165,7 +194,7 @@ export function Navbar() {
 
                     {/* Profile */}
                     <Link
-                      to={brandUser ? '/brand-public-profile' : '/influencer/dashboard'}
+                      to={brandUser ? '/brand-public-profile' : '/influencer/dashboard?tab=profile'}
                       onClick={() => setDropdownOpen(false)}
                       className="flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors text-sm">
                       <User className="w-4 h-4" />
@@ -173,7 +202,7 @@ export function Navbar() {
                     </Link>
 
                     {/* Settings */}
-                    <Link to={dashboardPath} onClick={() => setDropdownOpen(false)}
+                    <Link to={brandUser ? '/brand-dashboard' : '/influencer/dashboard?tab=settings'} onClick={() => setDropdownOpen(false)}
                       className="flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors text-sm">
                       <Settings className="w-4 h-4" />
                       Settings

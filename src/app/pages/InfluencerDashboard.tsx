@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -14,6 +14,10 @@ import { API_BASE_URL } from '../../services/api';
 import { useCategories } from '../hooks/useCategories';
 import { toast } from 'sonner';
 import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
+import {
+  clearInfluencerClientData,
+  getInfluencerAnalyticsStorageKey,
+} from '../utils/influencerStorage';
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
   'notifications' | 'analytics' | 'settings';
@@ -93,8 +97,6 @@ const mockNotifications = [
   { id: '5', brand: 'BeautyPlus', brandInitial: 'B', brandColor: 'bg-purple-500', message: '@llabeauty mentioned you in a post.', time: '2d ago', isNew: false },
 ];
 
-const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
-
 const DEFAULT_ANALYTICS_DATA: SharedAnalyticsData = {
   instagram: { followers: '', avgViews: '', engagement: '' },
   tiktok: { followers: '', avgViews: '', engagement: '' },
@@ -112,6 +114,7 @@ const isLegacySeededAnalytics = (data: any) =>
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { categories: apiCategories } = useCategories();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [userData, setUserData] = useState<any>(null);
@@ -134,6 +137,7 @@ export default function InfluencerDashboard() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [platformForm, setPlatformForm] = useState<Record<number, PlatformFormItem>>({});
   const profileImageInputRef = useRef<HTMLInputElement>(null);
+  const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -260,6 +264,14 @@ export default function InfluencerDashboard() {
 
   // Fetch profile
   useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    const allowedTabs: TabType[] = ['overview', 'profile', 'analytics', 'campaigns', 'earnings', 'messages', 'notifications', 'settings'];
+    if (tabParam && allowedTabs.includes(tabParam as TabType)) {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     const fetchProfile = async () => {
       const token = localStorage.getItem('influencer_token');
       if (!token) { navigate('/influencer/login'); return; }
@@ -279,8 +291,7 @@ export default function InfluencerDashboard() {
         });
 
         if (response.status === 401 || response.status === 403) {
-          localStorage.removeItem('influencer_token');
-          localStorage.removeItem('influencer_user');
+          clearInfluencerClientData();
           navigate('/influencer/login');
           return;
         }
@@ -321,7 +332,7 @@ export default function InfluencerDashboard() {
 
   useEffect(() => {
     const loadAnalyticsData = () => {
-      const savedAnalytics = localStorage.getItem(ANALYTICS_STORAGE_KEY);
+      const savedAnalytics = localStorage.getItem(analyticsStorageKey);
       if (!savedAnalytics) {
         setAnalyticsData(DEFAULT_ANALYTICS_DATA);
         return;
@@ -330,7 +341,7 @@ export default function InfluencerDashboard() {
       try {
         const parsed = JSON.parse(savedAnalytics);
         if (isLegacySeededAnalytics(parsed)) {
-          localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+          localStorage.removeItem(analyticsStorageKey);
           setAnalyticsData(DEFAULT_ANALYTICS_DATA);
           return;
         }
@@ -356,7 +367,7 @@ export default function InfluencerDashboard() {
       window.removeEventListener('influencer-analytics-updated', loadAnalyticsData as EventListener);
       window.removeEventListener('focus', loadAnalyticsData);
     };
-  }, []);
+  }, [analyticsStorageKey]);
 
   const refreshProfile = async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
@@ -488,8 +499,7 @@ export default function InfluencerDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('influencer_token');
-    localStorage.removeItem('influencer_user');
+    clearInfluencerClientData();
     navigate('/');
   };
 
@@ -516,8 +526,7 @@ export default function InfluencerDashboard() {
       const result = await response.json();
       if (result.success || response.ok) {
         toast.success(result.message || 'Account deleted successfully');
-        localStorage.removeItem('influencer_token');
-        localStorage.removeItem('influencer_user');
+        clearInfluencerClientData();
         navigate('/');
       } else {
         toast.error(result.message || 'Failed to delete account');

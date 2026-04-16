@@ -5,6 +5,10 @@ import { Instagram, Music, Youtube, Edit, Save, Plus, Trash2, Globe } from 'luci
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../services/api';
+import {
+  getInfluencerAnalyticsSavedKey,
+  getInfluencerAnalyticsStorageKey,
+} from '../utils/influencerStorage';
 
 type PlatformType = 'instagram' | 'tiktok' | 'youtube' | 'others';
 
@@ -38,8 +42,6 @@ interface AnalyticsState {
   };
 }
 
-const ANALYTICS_STORAGE_KEY = 'influencer_analytics';
-const ANALYTICS_USER_SAVED_KEY = 'influencer_analytics_user_saved';
 const PLATFORM_ID_TO_KEY: Record<number, PlatformType> = {
   1: 'instagram',
   2: 'youtube',
@@ -156,6 +158,8 @@ export function InfluencerAnalytics() {
     youtube: { username: '', profile_url: '' },
     others: { username: '', profile_url: '' },
   });
+  const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
+  const analyticsUserSavedKey = getInfluencerAnalyticsSavedKey();
 
   const toStringValue = (value: unknown, fallback = '') => {
     if (value === null || value === undefined) return fallback;
@@ -257,8 +261,8 @@ export function InfluencerAnalytics() {
   };
 
   useEffect(() => {
-    const savedAnalytics = localStorage.getItem(ANALYTICS_STORAGE_KEY);
-    const hasUserSavedAnalytics = localStorage.getItem(ANALYTICS_USER_SAVED_KEY) === '1';
+    const savedAnalytics = localStorage.getItem(analyticsStorageKey);
+    const hasUserSavedAnalytics = localStorage.getItem(analyticsUserSavedKey) === '1';
     if (!savedAnalytics) {
       setAnalyticsData(DEFAULT_ANALYTICS_DATA);
       return;
@@ -267,12 +271,12 @@ export function InfluencerAnalytics() {
     try {
       const parsed = JSON.parse(savedAnalytics);
       if (!hasUserSavedAnalytics) {
-        localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+        localStorage.removeItem(analyticsStorageKey);
         setAnalyticsData(DEFAULT_ANALYTICS_DATA);
         return;
       }
       if (isLegacySeededAnalytics(parsed)) {
-        localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+        localStorage.removeItem(analyticsStorageKey);
         setAnalyticsData(DEFAULT_ANALYTICS_DATA);
         return;
       }
@@ -292,7 +296,7 @@ export function InfluencerAnalytics() {
     } catch {
       setAnalyticsData(DEFAULT_ANALYTICS_DATA);
     }
-  }, []);
+  }, [analyticsStorageKey, analyticsUserSavedKey]);
 
   useEffect(() => {
     const token = localStorage.getItem('influencer_token');
@@ -366,8 +370,8 @@ export function InfluencerAnalytics() {
         return;
       }
 
-      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
-      localStorage.setItem(ANALYTICS_USER_SAVED_KEY, '1');
+      localStorage.setItem(analyticsStorageKey, JSON.stringify(analyticsData));
+      localStorage.setItem(analyticsUserSavedKey, '1');
       window.dispatchEvent(new Event('influencer-analytics-updated'));
       toast.success('Platform metrics updated');
       setIsEditingMetrics(false);
@@ -489,8 +493,8 @@ export function InfluencerAnalytics() {
         return;
       }
 
-      localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(analyticsData));
-      localStorage.setItem(ANALYTICS_USER_SAVED_KEY, '1');
+      localStorage.setItem(analyticsStorageKey, JSON.stringify(analyticsData));
+      localStorage.setItem(analyticsUserSavedKey, '1');
       window.dispatchEvent(new Event('influencer-analytics-updated'));
       setIsEditingDemographics(false);
       toast.success('Audience demographics updated successfully');

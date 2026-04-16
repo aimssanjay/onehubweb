@@ -22,6 +22,9 @@ interface InfluencerListResponse {
 }
 
 const DEFAULT_LIMIT = 12;
+const DEFAULT_FOLLOWER_RANGE: [number, number] = [0, 1000000];
+const DEFAULT_PRICE_RANGE: [number, number] = [0, 10000];
+const DEFAULT_ENGAGEMENT_RANGE: [number, number] = [0, 10];
 
 function parseNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number') {
@@ -44,20 +47,53 @@ function parseNumber(value: unknown, fallback = 0): number {
 
 function extractPagination(data: Record<string, unknown>, fallbackPage: number, fallbackLimit: number, fallbackTotal: number) {
   const meta = (data.pagination as Record<string, unknown>) || (data.meta as Record<string, unknown>) || {};
-  const page = parseNumber(meta.page ?? data.page, fallbackPage);
-  const limit = parseNumber(meta.limit ?? data.limit, fallbackLimit);
-  const total = parseNumber(meta.total ?? data.total, fallbackTotal);
+  const page = parseNumber(meta.page ?? meta.current_page ?? data.page ?? data.current_page, fallbackPage);
+  const limit = parseNumber(meta.limit ?? meta.per_page ?? data.limit ?? data.per_page, fallbackLimit);
+  const total = parseNumber(
+    meta.total ??
+      meta.total_count ??
+      meta.count ??
+      data.total ??
+      data.total_count ??
+      data.count,
+    fallbackTotal
+  );
+  const rawTotalPages = parseNumber(
+    meta.total_pages ??
+      meta.totalPages ??
+      meta.last_page ??
+      data.total_pages ??
+      data.totalPages ??
+      data.last_page,
+    0
+  );
 
   return {
     page,
     limit,
     total,
-    totalPages: Math.max(1, parseNumber(meta.total_pages ?? meta.totalPages ?? data.total_pages ?? data.totalPages, Math.ceil(total / Math.max(limit, 1)))),
+    totalPages: Math.max(1, rawTotalPages || Math.ceil(total / Math.max(limit, 1))),
   };
 }
 
 function normalizePlatformName(name: string) {
   return name.trim().toLowerCase();
+}
+
+function hasExplicitPaginationMeta(data: Record<string, unknown>) {
+  const meta = (data.pagination as Record<string, unknown>) || (data.meta as Record<string, unknown>) || {};
+  return Boolean(
+    meta.total_pages ??
+      meta.totalPages ??
+      meta.last_page ??
+      meta.total ??
+      meta.total_count ??
+      data.total_pages ??
+      data.totalPages ??
+      data.last_page ??
+      data.total ??
+      data.total_count
+  );
 }
 
 function toNumberArray(value: unknown): number[] {
@@ -74,12 +110,34 @@ function toNumberArray(value: unknown): number[] {
     return Number.isFinite(parsed) ? [parsed] : [];
   }
   if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => parseNumber(item, NaN))
+            .filter((num) => Number.isFinite(num));
+        }
+      } catch {
+        // fallback to comma parser below
+      }
+    }
     return value
       .split(',')
-      .map((part) => parseNumber(part.trim(), NaN))
+      .map((part) => parseNumber(part.replace(/[\[\]\s]/g, ''), NaN))
       .filter((num) => Number.isFinite(num));
   }
   return [];
+}
+
+function parseJsonSafely(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 export function InfluencerListing() {
@@ -103,9 +161,9 @@ export function InfluencerListing() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<number[]>([]);
-  const [followerRange, setFollowerRange] = useState([0, 1000000]);
-  const [priceRange, setPriceRange] = useState([0, 10000]);
-  const [engagementRange, setEngagementRange] = useState([0, 10]);
+  const [followerRange, setFollowerRange] = useState<number[]>([...DEFAULT_FOLLOWER_RANGE]);
+  const [priceRange, setPriceRange] = useState<number[]>([...DEFAULT_PRICE_RANGE]);
+  const [engagementRange, setEngagementRange] = useState<number[]>([...DEFAULT_ENGAGEMENT_RANGE]);
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
   
@@ -206,9 +264,9 @@ export function InfluencerListing() {
     setSearchQuery('');
     setSelectedCategories([]);
     setSelectedPlatforms([]);
-    setFollowerRange([0, 1000000]);
-    setPriceRange([0, 10000]);
-    setEngagementRange([0, 10]);
+    setFollowerRange([...DEFAULT_FOLLOWER_RANGE]);
+    setPriceRange([...DEFAULT_PRICE_RANGE]);
+    setEngagementRange([...DEFAULT_ENGAGEMENT_RANGE]);
     setSelectedBadges([]);
     setMinRating(0);
     setCurrentPage(1);
@@ -295,6 +353,54 @@ export function InfluencerListing() {
 
   const mapApiInfluencer = (row: Record<string, unknown>, index: number): Influencer => {
     const categoriesFromApiSet = new Set<string>();
+    const addCategoryId = (rawId: unknown) => {
+      const id = parseNumber(rawId, NaN);
+      if (!Number.isFinite(id)) return;
+      const mapped = categoryNameById.get(id);
+      if (mapped) categoriesFromApiSet.add(mapped);
+    };
+    const addCategoryName = (rawName: unknown) => {
+      const name = String(rawName ?? '').trim();
+      if (name) categoriesFromApiSet.add(name);
+    };
+    const collectCategories = (input: unknown) => {
+      if (!input) return;
+      if (Array.isArray(input)) {
+        input.forEach((item) => collectCategories(item));
+        return;
+      }
+      if (typeof input === 'string') {
+        const trimmed = input.trim();
+        if (!trimmed) return;
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          const parsed = parseJsonSafely(trimmed);
+          if (parsed) {
+            collectCategories(parsed);
+            return;
+          }
+        }
+        trimmed
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((part) => {
+            const asId = parseNumber(part, NaN);
+            if (Number.isFinite(asId)) addCategoryId(asId);
+            else addCategoryName(part);
+          });
+        return;
+      }
+      if (typeof input === 'object') {
+        const obj = input as Record<string, unknown>;
+        addCategoryName(obj.name ?? obj.category_name ?? obj.title ?? obj.label ?? obj.slug);
+        addCategoryId(obj.id ?? obj.category_id ?? obj.categoryId ?? obj.categoryID);
+        if (obj.category) collectCategories(obj.category);
+        if (obj.categories) collectCategories(obj.categories);
+        if (obj.niche) collectCategories(obj.niche);
+        if (obj.niches) collectCategories(obj.niches);
+      }
+    };
+
     const categorySources = [
       row.categories,
       row.category,
@@ -303,45 +409,15 @@ export function InfluencerListing() {
       row.category_title,
       row.categoryType,
       row.influencer_categories,
+      row.niche,
+      row.niches,
+      row.tags,
+      row.specialization,
+      row.specializations,
+      row.interests,
     ];
 
-    categorySources.forEach((source) => {
-      if (Array.isArray(source)) {
-        source.forEach((categoryRow) => {
-          if (typeof categoryRow === 'string' && categoryRow.trim()) {
-            categoriesFromApiSet.add(categoryRow.trim());
-            return;
-          }
-          if (categoryRow && typeof categoryRow === 'object') {
-            const catObj = categoryRow as Record<string, unknown>;
-            const catName = String(
-              catObj.name ||
-              catObj.category_name ||
-              (catObj.category && typeof catObj.category === 'object'
-                ? (catObj.category as Record<string, unknown>).name
-                : '')
-            ).trim();
-            if (catName) categoriesFromApiSet.add(catName);
-          }
-        });
-      } else if (source && typeof source === 'object') {
-        const catObj = source as Record<string, unknown>;
-        const catName = String(
-          catObj.name ||
-          catObj.category_name ||
-          (catObj.category && typeof catObj.category === 'object'
-            ? (catObj.category as Record<string, unknown>).name
-            : '')
-        ).trim();
-        if (catName) categoriesFromApiSet.add(catName);
-      } else if (typeof source === 'string' && source.trim()) {
-        source
-          .split(',')
-          .map((part) => part.trim())
-          .filter(Boolean)
-          .forEach((name) => categoriesFromApiSet.add(name));
-      }
-    });
+    categorySources.forEach((source) => collectCategories(source));
 
     const categoryIdsFromApi = toNumberArray(row.category_ids ?? row.categories_ids ?? row.category_id);
     categoryIdsFromApi.forEach((categoryId) => {
@@ -438,20 +514,32 @@ export function InfluencerListing() {
           selectedCategories.length > 0
             ? selectedCategories
             : (allCategoryIds.length > 0 ? allCategoryIds : undefined);
+        const hasPriceFilter =
+          priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
+        const hasFollowerFilter =
+          followerRange[0] !== DEFAULT_FOLLOWER_RANGE[0] || followerRange[1] !== DEFAULT_FOLLOWER_RANGE[1];
+        const hasEngagementFilter =
+          engagementRange[0] !== DEFAULT_ENGAGEMENT_RANGE[0] || engagementRange[1] !== DEFAULT_ENGAGEMENT_RANGE[1];
 
-        const payload = {
+        const payload: Record<string, unknown> = {
           platform_id: effectivePlatformIds,
           category_id: effectiveCategoryIds,
           keyword: searchQuery.trim(),
-          min_price: priceRange[0],
-          max_price: priceRange[1],
-          min_followers: followerRange[0],
-          max_followers: followerRange[1],
-          min_engagement: engagementRange[0],
-          max_engagement: engagementRange[1],
           page: currentPage,
           limit,
         };
+        if (hasPriceFilter) {
+          payload.min_price = priceRange[0];
+          payload.max_price = priceRange[1];
+        }
+        if (hasFollowerFilter) {
+          payload.min_followers = followerRange[0];
+          payload.max_followers = followerRange[1];
+        }
+        if (hasEngagementFilter) {
+          payload.min_engagement = engagementRange[0];
+          payload.max_engagement = engagementRange[1];
+        }
 
         const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
           method: 'POST',
@@ -477,6 +565,7 @@ export function InfluencerListing() {
           .map((row, index) => mapApiInfluencer(row, index));
 
         let pagination = extractPagination(responseData, currentPage, limit, mapped.length);
+        const explicitPagination = hasExplicitPaginationMeta(responseData);
 
         const hasNoExplicitFilters =
           !searchQuery.trim() &&
@@ -518,6 +607,20 @@ export function InfluencerListing() {
           }
         }
 
+        // If backend omits pagination meta, keep pagination usable with a progressive fallback.
+        if (!explicitPagination) {
+          if (mapped.length === 0 && currentPage > 1) {
+            // Prevent dead-end blank page when "next" was optimistic.
+            setCurrentPage((prev) => Math.max(1, prev - 1));
+            setIsLoading(false);
+            return;
+          }
+
+          const reachedEnd = mapped.length < limit;
+          pagination.totalPages = reachedEnd ? currentPage : currentPage + 1;
+          pagination.total = (currentPage - 1) * limit + mapped.length;
+        }
+
         setInfluencerResults(mapped);
         setTotalCount(pagination.total);
         setTotalPages(pagination.totalPages);
@@ -533,6 +636,13 @@ export function InfluencerListing() {
 
     fetchInfluencers();
   }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, currentPage, limit, minRating, apiPlatforms, categories]);
+
+  useEffect(() => {
+    if (totalPages < 1) return;
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const paginationPages = useMemo(() => {
     const pages: number[] = [];
