@@ -135,6 +135,7 @@ export default function InfluencerDashboard() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', password: '', confirmPassword: '' });
   const [isPasswordUpdating, setIsPasswordUpdating] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [platformForm, setPlatformForm] = useState<Record<number, PlatformFormItem>>({});
   const profileImageInputRef = useRef<HTMLInputElement>(null);
   const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
@@ -203,6 +204,50 @@ export default function InfluencerDashboard() {
     });
 
     return byPlatform;
+  };
+
+  const buildNormalizedPlatformsPayload = (source: Record<number, PlatformFormItem>) => {
+    return PLATFORM_CONFIG.map((platform) => {
+      const item = source[platform.platformId] || {
+        username: '',
+        profile_url: '',
+        followers: '',
+        engagement_rate: '',
+        total_reach: '',
+      };
+
+      return {
+        platform_id: platform.platformId,
+        username: item.username.trim(),
+        profile_url: item.profile_url.trim(),
+        followers: parseMaybeNumber(item.followers) ?? 0,
+        engagement_rate: parseMaybeFloat(item.engagement_rate) ?? 0,
+        total_reach: item.total_reach.trim(),
+      };
+    }).filter((item) =>
+      item.username || item.profile_url || item.followers > 0 || item.engagement_rate > 0 || item.total_reach
+    );
+  };
+
+  const arePlatformsEqual = (
+    a: Array<{ platform_id: number; username: string; profile_url: string; followers: number; engagement_rate: number; total_reach: string }>,
+    b: Array<{ platform_id: number; username: string; profile_url: string; followers: number; engagement_rate: number; total_reach: string }>
+  ) => {
+    if (a.length !== b.length) return false;
+    const sortFn = (x: { platform_id: number }, y: { platform_id: number }) => x.platform_id - y.platform_id;
+    const aa = [...a].sort(sortFn);
+    const bb = [...b].sort(sortFn);
+    return aa.every((item, idx) => {
+      const other = bb[idx];
+      return (
+        item.platform_id === other.platform_id &&
+        item.username === other.username &&
+        item.profile_url === other.profile_url &&
+        item.followers === other.followers &&
+        item.engagement_rate === other.engagement_rate &&
+        item.total_reach === other.total_reach
+      );
+    });
   };
 
   const applyProfileData = (data: any) => {
@@ -390,9 +435,11 @@ export default function InfluencerDashboard() {
 
   // Save profile to API
   const handleSaveProfile = async () => {
+    if (isSavingProfile) return;
     const token = localStorage.getItem('influencer_token');
     if (!token) return;
     try {
+      setIsSavingProfile(true);
       if (profileImageFile) {
         const formData = new FormData();
         formData.append('profile_pic', profileImageFile);
@@ -455,28 +502,11 @@ export default function InfluencerDashboard() {
         return;
       }
 
-      const platformsPayload = PLATFORM_CONFIG.map((platform) => {
-        const item = platformForm[platform.platformId] || {
-          username: '',
-          profile_url: '',
-          followers: '',
-          engagement_rate: '',
-          total_reach: '',
-        };
+      const platformsPayload = buildNormalizedPlatformsPayload(platformForm);
+      const existingPlatformsPayload = buildNormalizedPlatformsPayload(buildPlatformForm(userData?.social_accounts || []));
+      const hasPlatformChanges = !arePlatformsEqual(platformsPayload, existingPlatformsPayload);
 
-        return {
-          platform_id: platform.platformId,
-          username: item.username.trim(),
-          profile_url: item.profile_url.trim(),
-          followers: parseMaybeNumber(item.followers) ?? 0,
-          engagement_rate: parseMaybeFloat(item.engagement_rate) ?? 0,
-          total_reach: item.total_reach.trim(),
-        };
-      }).filter((item) =>
-        item.username || item.profile_url || item.followers > 0 || item.engagement_rate > 0 || item.total_reach
-      );
-
-      if (platformsPayload.length > 0) {
+      if (hasPlatformChanges && platformsPayload.length > 0) {
         const platformsResponse = await fetch(`${API_BASE_URL}/influencers/update-platforms`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -495,6 +525,8 @@ export default function InfluencerDashboard() {
       toast.success('Profile updated successfully');
     } catch (error) {
       toast.error('Server error');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -1120,11 +1152,12 @@ export default function InfluencerDashboard() {
                 <h1 className="text-2xl font-bold text-white">My Profile</h1>
                 <button
                   onClick={() => isEditing ? handleSaveProfile() : setIsEditing(true)}
+                  disabled={isSavingProfile}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                     isEditing ? 'bg-primary hover:bg-secondary text-black' : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
-                  }`}>
+                  } ${isSavingProfile ? 'opacity-60 cursor-not-allowed' : ''}`}>
                   <Edit className="w-4 h-4" />
-                  {isEditing ? 'Save Profile' : 'Edit Profile'}
+                  {isEditing ? (isSavingProfile ? 'Saving...' : 'Save Profile') : 'Edit Profile'}
                 </button>
               </div>
 
@@ -1353,10 +1386,17 @@ export default function InfluencerDashboard() {
 
                     {isEditing && (
                       <div className="flex gap-3 pt-4 border-t border-gray-800">
-                        <button onClick={handleSaveProfile} className="flex-1 bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg transition-colors text-sm">
-                          Save Changes
+                        <button
+                          onClick={handleSaveProfile}
+                          disabled={isSavingProfile}
+                          className={`flex-1 bg-primary hover:bg-secondary text-black font-semibold py-2.5 rounded-lg transition-colors text-sm ${
+                            isSavingProfile ? 'opacity-60 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          {isSavingProfile ? 'Saving...' : 'Save Changes'}
                         </button>
                         <button onClick={resetEditState}
+                          disabled={isSavingProfile}
                           className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm">
                           Cancel
                         </button>
