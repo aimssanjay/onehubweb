@@ -60,7 +60,7 @@ const DEFAULT_AUDIENCE_AGE: AudienceAgeItem[] = [
   { range: '25-34', percentage: 0 },
   { range: '35-44', percentage: 0 },
   { range: '45-64', percentage: 0 },
-  { range: '65+', percentage: 0 },
+  
 ];
 
 const DEFAULT_AUDIENCE_GENDER: AudienceGenderData = {
@@ -578,8 +578,8 @@ export function InfluencerProfile() {
         let resolved = false;
 
         for (const candidate of candidates) {
-          // Try POST first as documented, fallback to GET query param if backend expects GET.
-          const postResponse = await fetch(`${API_BASE_URL}/influencers/public-profile`, {
+          // Keep request shape aligned with backend expectation: slug in JSON body.
+          const response = await fetch(`${API_BASE_URL}/influencers/public-profile`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -587,24 +587,7 @@ export function InfluencerProfile() {
             },
             body: JSON.stringify({ slug: candidate }),
           });
-
-          let response = postResponse;
-          let result: PublicProfileResponse = await postResponse.json();
-
-          if (!postResponse.ok) {
-            const getResponse = await fetch(
-              `${API_BASE_URL}/influencers/public-profile?slug=${encodeURIComponent(candidate)}`,
-              {
-                method: 'GET',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-                },
-              }
-            );
-            response = getResponse;
-            result = await getResponse.json();
-          }
+          const result: PublicProfileResponse = await response.json();
 
           if (!response.ok) {
             lastErrorMessage = result?.message || lastErrorMessage;
