@@ -160,6 +160,10 @@ export function InfluencerAnalytics() {
   });
   const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
   const analyticsUserSavedKey = getInfluencerAnalyticsSavedKey();
+  const persistAnalytics = (nextData: AnalyticsState) => {
+    localStorage.setItem(analyticsStorageKey, JSON.stringify(nextData));
+    localStorage.setItem(analyticsUserSavedKey, '1');
+  };
 
   const toStringValue = (value: unknown, fallback = '') => {
     if (value === null || value === undefined) return fallback;
@@ -298,31 +302,36 @@ export function InfluencerAnalytics() {
     }
   }, [analyticsStorageKey, analyticsUserSavedKey]);
 
+  const syncAnalyticsFromApi = async (token: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const result = await response.json();
+      if (!(result.success || response.ok)) return;
+
+      const profileData = result.data || {};
+      setPlatformMeta(extractPlatformMeta(profileData));
+      setAnalyticsData((prev) => {
+        const merged = mergeApiProfileIntoAnalytics(profileData, prev);
+        persistAnalytics(merged);
+        return merged;
+      });
+      window.dispatchEvent(new Event('influencer-analytics-updated'));
+      window.dispatchEvent(new Event('influencer-profile-updated'));
+    } catch {
+      // Keep existing local analytics state if API fetch fails.
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('influencer_token');
     if (!token) return;
-
-    const loadAnalyticsFromApi = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const result = await response.json();
-        if (!(result.success || response.ok)) return;
-
-        // Keep analytics UI empty by default until user manually enters values.
-        // We only hydrate editable meta fields (username/profile_url) from API.
-        setPlatformMeta(extractPlatformMeta(result.data || {}));
-      } catch {
-        // Keep existing local analytics state if API fetch fails.
-      }
-    };
-
-    loadAnalyticsFromApi();
+    syncAnalyticsFromApi(token);
   }, []);
 
   const handleSaveMetrics = async () => {
@@ -370,9 +379,9 @@ export function InfluencerAnalytics() {
         return;
       }
 
-      localStorage.setItem(analyticsStorageKey, JSON.stringify(analyticsData));
-      localStorage.setItem(analyticsUserSavedKey, '1');
+      persistAnalytics(analyticsData);
       window.dispatchEvent(new Event('influencer-analytics-updated'));
+      await syncAnalyticsFromApi(token);
       toast.success('Platform metrics updated');
       setIsEditingMetrics(false);
     } catch {
@@ -493,9 +502,9 @@ export function InfluencerAnalytics() {
         return;
       }
 
-      localStorage.setItem(analyticsStorageKey, JSON.stringify(analyticsData));
-      localStorage.setItem(analyticsUserSavedKey, '1');
+      persistAnalytics(analyticsData);
       window.dispatchEvent(new Event('influencer-analytics-updated'));
+      await syncAnalyticsFromApi(token);
       setIsEditingDemographics(false);
       toast.success('Audience demographics updated successfully');
     } catch {

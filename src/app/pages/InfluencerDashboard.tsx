@@ -174,6 +174,81 @@ export default function InfluencerDashboard() {
     return Number.isFinite(num) ? num : undefined;
   };
 
+  const toPositiveMetric = (value: unknown, fallback = '') => {
+    const str = String(value ?? '').trim();
+    if (!str) return fallback;
+    const numeric = Number(str.replace(/,/g, '').replace('%', ''));
+    if (Number.isFinite(numeric) && numeric <= 0) return fallback;
+    return str;
+  };
+
+  const syncAnalyticsFromProfile = (profile: any) => {
+    if (!profile || typeof profile !== 'object') return;
+
+    setAnalyticsData((prev) => {
+      const next: SharedAnalyticsData = {
+        ...prev,
+        instagram: { ...prev.instagram },
+        tiktok: { ...prev.tiktok },
+        youtube: { ...prev.youtube },
+        others: { ...prev.others },
+        audienceLocation: [...prev.audienceLocation],
+        audienceAge: [...prev.audienceAge],
+        audienceGender: { ...prev.audienceGender },
+      };
+
+      const platformMap: Record<number, keyof Pick<SharedAnalyticsData, 'instagram' | 'youtube' | 'tiktok' | 'others'>> = {
+        1: 'instagram',
+        2: 'youtube',
+        3: 'tiktok',
+        4: 'others',
+      };
+      const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+      socialAccounts.forEach((account: any) => {
+        const key = platformMap[Number(account?.platform_id)];
+        if (!key) return;
+        next[key] = {
+          followers: toPositiveMetric(account?.followers, next[key].followers),
+          avgViews: toPositiveMetric(
+            account?.total_reach ?? account?.avg_views ?? account?.average_views,
+            next[key].avgViews
+          ),
+          engagement: toPositiveMetric(account?.engagement_rate, next[key].engagement),
+        };
+      });
+
+      const audienceLocations = profile?.audience_locations || profile?.audienceLocation;
+      if (Array.isArray(audienceLocations) && audienceLocations.length > 0) {
+        next.audienceLocation = audienceLocations.map((item: any) => ({
+          country: String(item?.country ?? '').trim(),
+          percentage: toPositiveMetric(item?.percentage, ''),
+        })).filter((item: any) => item.country);
+      }
+
+      const audienceAge = profile?.audience_age || profile?.audienceAge;
+      if (Array.isArray(audienceAge) && audienceAge.length > 0) {
+        next.audienceAge = audienceAge.map((item: any) => ({
+          range: String(item?.age_range ?? item?.range ?? '').trim(),
+          percentage: toPositiveMetric(item?.percentage, ''),
+        })).filter((item: any) => item.range);
+      }
+
+      const audienceGender = profile?.audience_gender || profile?.audienceGender;
+      if (audienceGender && typeof audienceGender === 'object') {
+        next.audienceGender = {
+          female: toPositiveMetric((audienceGender as any)?.female, next.audienceGender.female),
+          male: toPositiveMetric((audienceGender as any)?.male, next.audienceGender.male),
+          other: toPositiveMetric((audienceGender as any)?.other, next.audienceGender.other || ''),
+        };
+      }
+
+      localStorage.setItem(analyticsStorageKey, JSON.stringify(next));
+      window.dispatchEvent(new Event('influencer-analytics-updated'));
+      window.dispatchEvent(new Event('influencer-profile-updated'));
+      return next;
+    });
+  };
+
   const getJoinedDateLabel = (data: any) => {
     const rawDate =
       data?.created_at ||
@@ -283,6 +358,7 @@ export default function InfluencerDashboard() {
         .map((cat: any) => cat.id || cat.category_id)
         .filter(Boolean)
     );
+    syncAnalyticsFromProfile(data);
   };
 
   const updatePlatformField = (platformId: number, field: keyof PlatformFormItem, value: string) => {
@@ -520,6 +596,7 @@ export default function InfluencerDashboard() {
       }
 
       await refreshProfile(token);
+      window.dispatchEvent(new Event('influencer-profile-updated'));
       setProfileImageFile(null);
       setIsEditing(false);
       toast.success('Profile updated successfully');

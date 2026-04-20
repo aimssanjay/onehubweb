@@ -3,6 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router';
 import { 
   MapPin, 
   Instagram, 
+  Youtube,
+  Video,
   Star, 
   ArrowLeft, 
   Share2,
@@ -25,6 +27,12 @@ import { influencers, type Influencer } from '../../data/mockData';
 import { API_BASE_URL } from '../../services/api';
 
 interface PublicProfileResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+interface InfluencerListResponse {
   success?: boolean;
   data?: unknown;
   message?: string;
@@ -508,6 +516,18 @@ function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: I
   };
 }
 
+function extractInfluencerRowsFromListResponse(payload: unknown): Record<string, unknown>[] {
+  const root = (payload && typeof payload === 'object') ? payload as Record<string, unknown> : {};
+  const data = (root?.data && typeof root.data === 'object') ? root.data as Record<string, unknown> : {};
+  const rows =
+    (Array.isArray(data.influencers) && data.influencers) ||
+    (Array.isArray(data.list) && data.list) ||
+    (Array.isArray(data.rows) && data.rows) ||
+    (Array.isArray(root.data) && root.data) ||
+    [];
+  return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
+}
+
 export function InfluencerProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -521,6 +541,7 @@ export function InfluencerProfile() {
   const [analyticsData, setAnalyticsData] = useState<ProfileAnalyticsData>(createDefaultAnalytics());
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [refreshProfileTick, setRefreshProfileTick] = useState(0);
 
   const routeValue = String(id || '').trim();
   const fallbackInfluencer = influencers.find(
@@ -560,6 +581,16 @@ export function InfluencerProfile() {
   }, []);
 
   useEffect(() => {
+    const triggerRefresh = () => setRefreshProfileTick((prev) => prev + 1);
+    window.addEventListener('focus', triggerRefresh);
+    window.addEventListener('influencer-profile-updated', triggerRefresh as EventListener);
+    return () => {
+      window.removeEventListener('focus', triggerRefresh);
+      window.removeEventListener('influencer-profile-updated', triggerRefresh as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     const fetchPublicProfile = async () => {
       if (!routeValue) return;
       setIsLoadingProfile(true);
@@ -574,6 +605,7 @@ export function InfluencerProfile() {
           localStorage.getItem('brand_token') ||
           localStorage.getItem('token');
         const candidates = collectSlugCandidates(routeValue, stateInfluencer, fallbackInfluencer);
+        const normalizedCandidates = candidates.map((item) => item.toLowerCase());
         let lastErrorMessage = 'Failed to load influencer public profile';
         let resolved = false;
 
@@ -581,6 +613,7 @@ export function InfluencerProfile() {
           // Keep request shape aligned with backend expectation: slug in JSON body.
           const response = await fetch(`${API_BASE_URL}/influencers/public-profile`, {
             method: 'POST',
+            cache: 'no-store',
             headers: {
               'Content-Type': 'application/json',
               ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -609,6 +642,84 @@ export function InfluencerProfile() {
         }
 
         if (!resolved) {
+          try {
+            // Targeted search first: query by slug-like candidates to avoid stale page-1 list data.
+            for (const candidate of candidates) {
+              const listResponse = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+                method: 'POST',
+                cache: 'no-store',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({
+                  platform_id: [],
+                  category_id: [],
+                  keyword: candidate,
+                  page: 1,
+                  limit: 30,
+                }),
+              });
+
+              if (!listResponse.ok) continue;
+              const listResult: InfluencerListResponse = await listResponse.json();
+              const listRows = extractInfluencerRowsFromListResponse(listResult);
+              const matchedRow = listRows.find((row: Record<string, unknown>) => {
+                const identityCandidates = collectIdentityCandidatesFromProfile(row)
+                  .map((value) => value.toLowerCase());
+                return identityCandidates.some((value) => normalizedCandidates.includes(value));
+              });
+
+              if (matchedRow) {
+                setInfluencer(mapPublicProfileToInfluencer(matchedRow, fallbackInfluencer));
+                setAnalyticsData(extractAnalyticsFromProfile(matchedRow, matchedRow));
+                setProfileError('');
+                resolved = true;
+                break;
+              }
+            }
+
+            // Broad fallback if keyword search misses due backend indexing quirks.
+            if (!resolved) {
+              const broadListResponse = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+                method: 'POST',
+                cache: 'no-store',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({
+                  platform_id: [],
+                  category_id: [],
+                  keyword: '',
+                  page: 1,
+                  limit: 120,
+                }),
+              });
+
+              if (broadListResponse.ok) {
+                const broadListResult: InfluencerListResponse = await broadListResponse.json();
+                const broadRows = extractInfluencerRowsFromListResponse(broadListResult);
+                const matchedRow = broadRows.find((row: Record<string, unknown>) => {
+                  const identityCandidates = collectIdentityCandidatesFromProfile(row)
+                    .map((value) => value.toLowerCase());
+                  return identityCandidates.some((value) => normalizedCandidates.includes(value));
+                });
+
+                if (matchedRow) {
+                  setInfluencer(mapPublicProfileToInfluencer(matchedRow, fallbackInfluencer));
+                  setAnalyticsData(extractAnalyticsFromProfile(matchedRow, matchedRow));
+                  setProfileError('');
+                  resolved = true;
+                }
+              }
+            }
+          } catch {
+            // Keep existing fallback logic below.
+          }
+        }
+
+        if (!resolved) {
           if (stateRawProfile) {
             setAnalyticsData(extractAnalyticsFromProfile(stateRawProfile, stateRawProfile));
             setProfileError('');
@@ -631,7 +742,7 @@ export function InfluencerProfile() {
     };
 
     fetchPublicProfile();
-  }, [routeValue, stateInfluencer, fallbackInfluencer, stateRawProfile]);
+  }, [routeValue, stateInfluencer, fallbackInfluencer, stateRawProfile, refreshProfileTick]);
 
   if (isLoadingProfile && !influencer) {
     return <div className="min-h-screen flex items-center justify-center bg-white text-gray-600">Loading profile...</div>;
@@ -659,6 +770,35 @@ export function InfluencerProfile() {
   const totalFollowers = Object.values(influencer.platforms).reduce((a, b) => a + b, 0);
   const engagementRate = influencer.engagement ? `${influencer.engagement}%` : 'N/A';
   const avgViewsLabel = analyticsData.avgViews > 0 ? formatFollowers(analyticsData.avgViews) : 'N/A';
+  const profilePlatformBadges = [
+    {
+      key: 'instagram',
+            followers: influencer.platforms.instagram,
+      Icon: Instagram,
+      className: 'bg-blue-50 text-blue-600 border border-blue-200',
+    },
+    {
+      key: 'youtube',
+            followers: influencer.platforms.youtube,
+      Icon: Youtube,
+      className: 'bg-red-50 text-red-600 border border-red-200',
+    },
+    {
+      key: 'tiktok',
+      followers: influencer.platforms.tiktok,
+      Icon: Video,
+      className: 'bg-gray-100 text-gray-700 border border-gray-300',
+    },
+  ].filter((item) => item.followers > 0);
+  const profileCategories = Array.from(
+    new Set(
+      (
+        influencer.categories && influencer.categories.length > 0
+          ? influencer.categories
+          : [influencer.category]
+      ).filter(Boolean)
+    )
+  );
 
   // Mock portfolio images for carousel
   const portfolioImages = [
@@ -917,12 +1057,27 @@ export function InfluencerProfile() {
                   {influencer.location}
                 </p>
                 
-                {influencer.platforms.instagram && (
-                  <Badge className="bg-blue-50 text-blue-600 border border-blue-200 mb-4 text-xs">
-                    <Instagram className="w-3 h-3 mr-1" />
-                    {formatFollowers(influencer.platforms.instagram)} Followers
-                  </Badge>
+                {profilePlatformBadges.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {profilePlatformBadges.map((platform) => (
+                      <Badge key={platform.key} className={`${platform.className} text-xs`}>
+                        <platform.Icon className="w-3 h-3 mr-1" />
+                        {platform.label} {formatFollowers(platform.followers)} Followers
+                      </Badge>
+                    ))}
+                  </div>
                 )}
+
+                {profileCategories.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    {profileCategories.map((cat) => (
+                      <Badge key={cat} className="bg-purple-50 text-purple-700 border border-purple-200 text-xs">
+                        {cat}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
 
                 {/* Badges - Hidden on mobile initially, can be shown in expandable section */}
                 {!isMobile && (
