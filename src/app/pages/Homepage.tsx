@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
@@ -10,16 +10,524 @@ import { SpotlightCarousel } from '../components/SpotlightCarousel';
 import { InstagramGridSection } from '../components/InstagramGridSection';
 import { SearchBar } from '../components/SearchBar';
 import { CategoryCarousel } from '../components/CategoryCarousel';
-import { influencers } from '../../data/mockData';
+import { useCategories } from '../hooks/useCategories';
+import { categories as mockCategories, influencers } from '../../data/mockData';
 import type { Influencer } from '../../data/mockData';
+import { API_BASE_URL } from '../../services/api';
+
+interface InfluencerListResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+function parseNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  if (typeof value === 'string') {
+    const raw = value.trim().toLowerCase().replace(/,/g, '');
+    if (!raw) return fallback;
+    const multiplier = raw.endsWith('k') ? 1_000 : raw.endsWith('m') ? 1_000_000 : 1;
+    const numericPart = multiplier === 1 ? raw : raw.slice(0, -1);
+    const parsed = Number(numericPart);
+    return Number.isFinite(parsed) ? parsed * multiplier : fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function parseJsonSafely(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function toNumberArray(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => parseNumber(item, NaN)).filter((num) => Number.isFinite(num));
+  }
+  if (typeof value === 'number') {
+    const parsed = parseNumber(value, NaN);
+    return Number.isFinite(parsed) ? [parsed] : [];
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const parsed = parseNumber(obj.id ?? obj.category_id ?? obj.categoryId, NaN);
+    return Number.isFinite(parsed) ? [parsed] : [];
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      const parsed = parseJsonSafely(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => parseNumber(item, NaN))
+          .filter((num) => Number.isFinite(num));
+      }
+    }
+    return value
+      .split(',')
+      .map((part) => parseNumber(part.replace(/[\[\]\s]/g, ''), NaN))
+      .filter((num) => Number.isFinite(num));
+  }
+  return [];
+}
+
+function extractCategoriesFromRow(
+  row: Record<string, unknown>,
+  categoryNameById?: Map<number, string>
+): string[] {
+  const categories = new Set<string>();
+
+  const addCategory = (value: unknown) => {
+    const name = String(value ?? '').trim();
+    if (name) categories.add(name);
+  };
+
+  const collect = (input: unknown) => {
+    if (!input) return;
+
+    if (Array.isArray(input)) {
+      input.forEach((item) => collect(item));
+      return;
+    }
+
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return;
+
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        const parsed = parseJsonSafely(trimmed);
+        if (parsed) {
+          collect(parsed);
+          return;
+        }
+      }
+
+      trimmed
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((item) => {
+          const asId = parseNumber(item, NaN);
+          if (Number.isFinite(asId) && categoryNameById?.has(asId)) {
+            addCategory(categoryNameById.get(asId));
+          } else {
+            addCategory(item);
+          }
+        });
+      return;
+    }
+
+    if (typeof input === 'object') {
+      const obj = input as Record<string, unknown>;
+      addCategory(obj.name ?? obj.category_name ?? obj.title ?? obj.label ?? obj.slug);
+      const categoryId = parseNumber(obj.id ?? obj.category_id ?? obj.categoryId, NaN);
+      if (Number.isFinite(categoryId) && categoryNameById?.has(categoryId)) {
+        addCategory(categoryNameById.get(categoryId));
+      }
+      if (obj.category) collect(obj.category);
+      if (obj.categories) collect(obj.categories);
+    }
+  };
+
+  [
+    row.categories,
+    row.category,
+    row.category_name,
+    row.category_names,
+    row.influencer_categories,
+    row.niche,
+    row.niches,
+    row.tags,
+    row.specialization,
+    row.specializations,
+    row.interests,
+  ].forEach((source) => collect(source));
+
+  const categoryIdsFromApi = toNumberArray(row.category_ids ?? row.categories_ids ?? row.category_id);
+  categoryIdsFromApi.forEach((categoryId) => {
+    const mappedName = categoryNameById?.get(categoryId);
+    if (mappedName) addCategory(mappedName);
+  });
+
+  return Array.from(categories);
+}
+
+function getPlatformFollowersFromRow(row: Record<string, unknown>): Influencer['platforms'] {
+  const result: Influencer['platforms'] = { instagram: 0, youtube: 0, tiktok: 0 };
+  const rawPlatforms =
+    row.platforms ||
+    row.social_accounts ||
+    row.platform_accounts ||
+    row.influencer_platforms;
+
+  if (Array.isArray(rawPlatforms)) {
+    rawPlatforms.forEach((platformItem) => {
+      if (!platformItem || typeof platformItem !== 'object') return;
+      const item = platformItem as Record<string, unknown>;
+      const nestedPlatform =
+        item.platform && typeof item.platform === 'object'
+          ? (item.platform as Record<string, unknown>)
+          : null;
+      const platformId = parseNumber(item.platform_id ?? item.id ?? nestedPlatform?.id, 0);
+      const name = String(item.platform_name || item.name || nestedPlatform?.name || '').toLowerCase();
+      const followers = parseNumber(
+        item.followers ??
+          item.follower_count ??
+          item.followers_count ??
+          item.followersCount ??
+          item.total_followers ??
+          item.totalFollowers ??
+          (item.pivot && typeof item.pivot === 'object'
+            ? (item.pivot as Record<string, unknown>).followers
+            : undefined),
+        0
+      );
+
+      if (name.includes('instagram')) result.instagram = followers;
+      if (name.includes('youtube')) result.youtube = followers;
+      if (name.includes('tiktok')) result.tiktok = followers;
+      if (platformId === 1 && (result.instagram || 0) === 0) result.instagram = followers;
+      if (platformId === 2 && (result.youtube || 0) === 0) result.youtube = followers;
+      if (platformId === 3 && (result.tiktok || 0) === 0) result.tiktok = followers;
+    });
+  } else if (rawPlatforms && typeof rawPlatforms === 'object') {
+    const obj = rawPlatforms as Record<string, unknown>;
+    result.instagram = parseNumber(obj.instagram ?? obj.instagram_followers ?? obj.instagramFollowers, 0);
+    result.youtube = parseNumber(obj.youtube ?? obj.youtube_followers ?? obj.youtubeFollowers, 0);
+    result.tiktok = parseNumber(obj.tiktok ?? obj.tiktok_followers ?? obj.tiktokFollowers, 0);
+  }
+
+  if ((result.instagram || 0) === 0) result.instagram = parseNumber(row.instagram_followers, 0);
+  if ((result.youtube || 0) === 0) result.youtube = parseNumber(row.youtube_followers, 0);
+  if ((result.tiktok || 0) === 0) result.tiktok = parseNumber(row.tiktok_followers, 0);
+  if ((result.instagram || 0) + (result.youtube || 0) + (result.tiktok || 0) === 0) {
+    const combinedFollowers = parseNumber(row.followers_count ?? row.total_followers ?? row.followers, 0);
+    const platformId = parseNumber(row.platform_id, 0);
+    if (platformId === 2) result.youtube = combinedFollowers;
+    else if (platformId === 3) result.tiktok = combinedFollowers;
+    else result.instagram = combinedFollowers;
+  }
+
+  return result;
+}
+
+function getEngagementFromRow(row: Record<string, unknown>): string | undefined {
+  const rawPlatforms =
+    row.platforms ||
+    row.social_accounts ||
+    row.platform_accounts ||
+    row.influencer_platforms;
+
+  let platformEngagement = 0;
+  if (Array.isArray(rawPlatforms)) {
+    for (const platformItem of rawPlatforms) {
+      if (!platformItem || typeof platformItem !== 'object') continue;
+      const item = platformItem as Record<string, unknown>;
+      const value = parseNumber(
+        item.engagement_rate ??
+          item.engagementRate ??
+          item.avg_engagement ??
+          item.average_engagement_rate ??
+          (item.pivot && typeof item.pivot === 'object'
+            ? (item.pivot as Record<string, unknown>).engagement_rate
+            : undefined),
+        0
+      );
+      if (value > 0) {
+        platformEngagement = value;
+        break;
+      }
+    }
+  }
+
+  const engagement = parseNumber(
+    row.engagement_rate ??
+      row.engagement ??
+      row.avg_engagement ??
+      row.average_engagement_rate,
+    platformEngagement
+  );
+
+  return engagement > 0 ? engagement.toFixed(1) : undefined;
+}
+
+function mapApiInfluencer(
+  row: Record<string, unknown>,
+  index: number,
+  categoryNameById?: Map<number, string>
+): Influencer {
+  const categories = extractCategoriesFromRow(row, categoryNameById);
+  const category = categories[0] || 'General';
+  const name = String(row.name || row.full_name || 'Influencer');
+  const usernameRaw = String(row.username || row.handle || toSlug(name));
+  const username = usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
+  const profileImage = String(
+    row.profile_pic ||
+      row.profile_image ||
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
+  );
+
+  return {
+    id: String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`),
+    slug: String(row.slug || row.influencer_slug || row.username || toSlug(name)),
+    name,
+    username,
+    category,
+    categories: categories.length > 0 ? categories : [category],
+    location: String(row.city_name || row.city || row.country_name || row.country || 'Not specified'),
+    bio: String(row.bio || ''),
+    profileImage,
+    coverImage: String(row.cover_image || profileImage),
+    verified: Boolean(row.is_verified),
+    featured: Boolean(row.is_featured),
+    platforms: getPlatformFollowersFromRow(row),
+    startingPrice: parseNumber(row.price_start ?? row.base_price, 0),
+    packages: [],
+    portfolio: [],
+    rating: parseNumber(row.rating, 4.5),
+    totalOrders: parseNumber(row.total_orders, 0),
+    engagement: getEngagementFromRow(row),
+    rawApiData: row,
+  };
+}
 
 export function Homepage() {
   const navigate = useNavigate();
-  const featuredCreators = influencers.slice(0, 12);
-  const instagramCreators = influencers.slice(0, 12);
-  const youtubeCreators = influencers.slice(8, 20);
-  const tiktokCreators = influencers.slice(0, 12);
-  const ugcCreators = influencers.slice(4, 16);
+  const { categories: categoryMaster } = useCategories();
+  const [homeInfluencers, setHomeInfluencers] = useState<Influencer[]>([]);
+  const [youtubeSectionInfluencers, setYoutubeSectionInfluencers] = useState<Influencer[]>([]);
+  const [tiktokSectionInfluencers, setTiktokSectionInfluencers] = useState<Influencer[]>([]);
+  const [isLoadingInfluencers, setIsLoadingInfluencers] = useState(false);
+  const [hasLoadedApi, setHasLoadedApi] = useState(false);
+  const [apiFailed, setApiFailed] = useState(false);
+
+  const categoryNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    categoryMaster.forEach((category) => {
+      map.set(category.id, category.name);
+    });
+    mockCategories.forEach((category) => {
+      const id = parseNumber(category.id, NaN);
+      if (Number.isFinite(id) && !map.has(id)) {
+        map.set(id, category.name);
+      }
+    });
+    return map;
+  }, [categoryMaster]);
+
+  const allCategoryIds = useMemo(
+    () => Array.from(categoryNameById.keys()).filter((id) => Number.isFinite(id)),
+    [categoryNameById]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchHomepageInfluencers = async () => {
+      setIsLoadingInfluencers(true);
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform_id: [1, 2, 3, 4],
+            category_id: allCategoryIds.length > 0 ? allCategoryIds : undefined,
+            keyword: '',
+            page: 1,
+            limit: 30,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load influencers');
+        }
+
+        const result: InfluencerListResponse = await response.json();
+        const responseData =
+          result?.data && typeof result.data === 'object'
+            ? (result.data as Record<string, unknown>)
+            : {};
+        const rows =
+          (Array.isArray(responseData.influencers) && responseData.influencers) ||
+          (Array.isArray(responseData.list) && responseData.list) ||
+          (Array.isArray(responseData.rows) && responseData.rows) ||
+          (Array.isArray(result.data) && result.data) ||
+          [];
+
+        const mapped = rows
+          .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+          .map((row, index) => mapApiInfluencer(row, index, categoryNameById));
+
+        if (isMounted) {
+          setHomeInfluencers(mapped);
+          setApiFailed(false);
+        }
+      } catch {
+        if (isMounted) {
+          setHomeInfluencers([]);
+          setApiFailed(true);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingInfluencers(false);
+          setHasLoadedApi(true);
+        }
+      }
+    };
+
+    fetchHomepageInfluencers();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryNameById, allCategoryIds]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchTiktokInfluencers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform_id: [3],
+            category_id: allCategoryIds.length > 0 ? allCategoryIds : undefined,
+            keyword: '',
+            page: 1,
+            limit: 60,
+          }),
+        });
+
+        if (!response.ok) return;
+
+        const result: InfluencerListResponse = await response.json();
+        const responseData =
+          result?.data && typeof result.data === 'object'
+            ? (result.data as Record<string, unknown>)
+            : {};
+        const rows =
+          (Array.isArray(responseData.influencers) && responseData.influencers) ||
+          (Array.isArray(responseData.list) && responseData.list) ||
+          (Array.isArray(responseData.rows) && responseData.rows) ||
+          (Array.isArray(result.data) && result.data) ||
+          [];
+
+        const mapped = rows
+          .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+          .map((row, index) => mapApiInfluencer(row, index, categoryNameById))
+          .filter((item) => (item.platforms.tiktok || 0) > 0);
+
+        if (isMounted) {
+          setTiktokSectionInfluencers(mapped);
+        }
+      } catch {
+        if (isMounted) {
+          setTiktokSectionInfluencers([]);
+        }
+      }
+    };
+
+    fetchTiktokInfluencers();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryNameById, allCategoryIds]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchYoutubeInfluencers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform_id: [2],
+            category_id: allCategoryIds.length > 0 ? allCategoryIds : undefined,
+            keyword: '',
+            page: 1,
+            limit: 60,
+          }),
+        });
+
+        if (!response.ok) return;
+
+        const result: InfluencerListResponse = await response.json();
+        const responseData =
+          result?.data && typeof result.data === 'object'
+            ? (result.data as Record<string, unknown>)
+            : {};
+        const rows =
+          (Array.isArray(responseData.influencers) && responseData.influencers) ||
+          (Array.isArray(responseData.list) && responseData.list) ||
+          (Array.isArray(responseData.rows) && responseData.rows) ||
+          (Array.isArray(result.data) && result.data) ||
+          [];
+
+        const mapped = rows
+          .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+          .map((row, index) => mapApiInfluencer(row, index, categoryNameById))
+          .filter((item) => (item.platforms.youtube || 0) > 0);
+
+        if (isMounted) {
+          setYoutubeSectionInfluencers(mapped);
+        }
+      } catch {
+        if (isMounted) {
+          setYoutubeSectionInfluencers([]);
+        }
+      }
+    };
+
+    fetchYoutubeInfluencers();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryNameById, allCategoryIds]);
+
+  const creatorSource = useMemo(() => {
+    if (!hasLoadedApi) return [];
+    if (homeInfluencers.length > 0) return homeInfluencers;
+    return apiFailed ? influencers : [];
+  }, [hasLoadedApi, homeInfluencers, apiFailed]);
+  const featuredCreators = creatorSource.slice(0, 12);
+  const instagramCreators = useMemo(() => {
+    const fromPlatform = creatorSource.filter((item) =>
+      (item.platforms.instagram || 0) > 0 &&
+      (item.platforms.youtube || 0) === 0 &&
+      (item.platforms.tiktok || 0) === 0
+    );
+    return (fromPlatform.length > 0 ? fromPlatform : creatorSource).slice(0, 12);
+  }, [creatorSource]);
+  const youtubeCreators = useMemo(() => {
+    const source = youtubeSectionInfluencers.length > 0 ? youtubeSectionInfluencers : creatorSource;
+    const fromPlatform = source.filter((item) =>
+      (item.platforms.youtube || 0) > 0
+    );
+    return fromPlatform.slice(0, 12);
+  }, [creatorSource, youtubeSectionInfluencers]);
+  const tiktokCreators = useMemo(() => {
+    const source = tiktokSectionInfluencers.length > 0 ? tiktokSectionInfluencers : creatorSource;
+    const fromPlatform = source.filter((item) => (item.platforms.tiktok || 0) > 0);
+    return fromPlatform.slice(0, 12);
+  }, [creatorSource, tiktokSectionInfluencers]);
+  const ugcCreators = creatorSource.slice(4, 16);
 
   const handleSearch = (platform: string, category: string) => {
     navigate('/browse', { state: { platform, category } });
@@ -28,7 +536,24 @@ export function Homepage() {
   // Navigation helper to match old onNavigate signature
   const onNavigate = (page: string, data?: any) => {
     if (page === 'profile' && data?.id) {
-      navigate(`/influencer/${data.id}`);
+      const routeId = String(data.id);
+      const navigationPool = [
+        ...featuredCreators,
+        ...instagramCreators,
+        ...youtubeCreators,
+        ...tiktokCreators,
+        ...ugcCreators,
+      ];
+      const matchedInfluencer = navigationPool.find((inf) =>
+        inf.id === routeId ||
+        inf.slug === routeId ||
+        inf.username.replace(/^@/, '') === routeId
+      );
+      if (matchedInfluencer) {
+        navigate(`/influencer/${routeId}`, { state: { influencer: matchedInfluencer } });
+      } else {
+        navigate(`/influencer/${routeId}`);
+      }
     } else if (page === 'browse') {
       if (data) {
         navigate('/browse', { state: data });
@@ -180,7 +705,7 @@ export function Homepage() {
 
       {/* Instagram Grid Section - NEW */}
       <InstagramGridSection
-        instagramInfluencers={influencers}
+        instagramInfluencers={instagramCreators}
         onViewProfile={(id) => onNavigate('profile', { id })}
       />
 
@@ -492,3 +1017,4 @@ export function Homepage() {
     </div>
   );
 }
+

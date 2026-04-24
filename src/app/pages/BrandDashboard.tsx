@@ -552,14 +552,20 @@ export function BrandDashboard() {
     if (!token) return;
     setOpenActionMenu(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/campaigns/get-campaign-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: campaign.id }),
+      const params = new URLSearchParams({ id: String(campaign.id) });
+      const response = await fetch(`${API_BASE_URL}/campaigns/get-campaign-details?${params.toString()}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-      const result = await response.json();
-      setViewCampaign(result.success ? result.data : campaign);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error((result as any)?.message || 'Failed to fetch campaign details');
+        setViewCampaign(campaign);
+        return;
+      }
+      setViewCampaign((result as any)?.success ? (result as any).data : ((result as any)?.data || campaign));
     } catch {
+      toast.error('Server error while loading campaign details');
       setViewCampaign(campaign);
     }
   };
@@ -570,13 +576,18 @@ export function BrandDashboard() {
     const token = localStorage.getItem('brand_token');
     if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/campaigns/get-campaign-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: campaign.id }),
+      const params = new URLSearchParams({ id: String(campaign.id) });
+      const response = await fetch(`${API_BASE_URL}/campaigns/get-campaign-details?${params.toString()}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-      const result = await response.json();
-      const detail = result.success ? result.data : campaign;
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error((result as any)?.message || 'Failed to fetch campaign details');
+        setEditCampaign({ ...campaign, category_ids: [] });
+        return;
+      }
+      const detail = (result as any)?.success ? (result as any).data : ((result as any)?.data || campaign);
       // Extract category IDs
       const catIds = (detail.campaign_categories || detail.categories || [])
         .map((c: any) => c.id || c.category_id || c.category?.id)
@@ -587,6 +598,7 @@ export function BrandDashboard() {
         status_id: detail.status_id || STATUS_ID_MAP[detail.status] || 1,
       });
     } catch {
+      toast.error('Server error while loading campaign details');
       setEditCampaign({ ...campaign, category_ids: [] });
     }
   };

@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type SVGProps } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { 
   MapPin, 
   Instagram, 
   Youtube,
-  Video,
   Star, 
   ArrowLeft, 
   Share2,
@@ -16,15 +15,20 @@ import {
   ChevronRight,
   Plus,
   ShoppingCart,
-  ChevronLeft
+  ChevronLeft,
+  X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { influencers, type Influencer } from '../../data/mockData';
+import { categories as mockCategories, type Influencer } from '../../data/mockData';
 import { API_BASE_URL } from '../../services/api';
+
+type ProfileInfluencer = Influencer & {
+  gallery: string[];
+};
 
 interface PublicProfileResponse {
   success?: boolean;
@@ -78,6 +82,14 @@ const DEFAULT_AUDIENCE_GENDER: AudienceGenderData = {
 };
 
 const INSTAGRAM_PLATFORM_IDS = new Set([1]);
+
+function TikTokIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+    </svg>
+  );
+}
 
 function createDefaultAnalytics(): ProfileAnalyticsData {
   return {
@@ -415,7 +427,218 @@ function extractAnalyticsFromProfile(
   return analytics;
 }
 
-function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: Influencer): Influencer {
+function extractCategoryLookupFromApiPayload(payload: unknown): Record<string, string> {
+  const root = (payload && typeof payload === 'object') ? payload as Record<string, unknown> : {};
+  const data = root.data;
+  const rows =
+    (Array.isArray(data) && data) ||
+    (data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>).categories) && (data as Record<string, unknown>).categories) ||
+    (data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>).list) && (data as Record<string, unknown>).list) ||
+    [];
+
+  const lookup: Record<string, string> = {};
+  rows.forEach((item) => {
+    const row = asRecord(item);
+    if (!row) return;
+    const idRaw = row.id ?? row.category_id;
+    const nameRaw = row.name ?? row.category_name ?? row.title;
+    const id = String(idRaw ?? '').trim();
+    const name = String(nameRaw ?? '').trim();
+    if (!id || !name) return;
+    lookup[id] = name;
+  });
+  return lookup;
+}
+
+function extractCategoryNamesFromProfileRow(
+  row: Record<string, unknown>,
+  fallback?: Influencer,
+  categoryLookup?: Record<string, string>
+): string[] {
+  const categories = new Set<string>();
+  const categoryNameById = new Map<string, string>();
+  mockCategories.forEach((category) => {
+    const id = String((category as unknown as { id?: string | number }).id ?? '').trim();
+    if (id && category.name) categoryNameById.set(id, category.name);
+  });
+  Object.entries(categoryLookup || {}).forEach(([id, name]) => {
+    if (!String(id).trim() || !String(name).trim()) return;
+    categoryNameById.set(String(id).trim(), String(name).trim());
+  });
+
+  const addCategory = (value: unknown) => {
+    if (typeof value === 'number' || (typeof value === 'string' && /^[0-9]+$/.test(value.trim()))) {
+      const mappedName = categoryNameById.get(String(value).trim());
+      if (mappedName) {
+        categories.add(mappedName);
+        return;
+      }
+    }
+    const text = String(value ?? '').trim();
+    if (!text) return;
+    if (text.toLowerCase() === '[object object]') return;
+    categories.add(text);
+  };
+
+  const collect = (input: unknown) => {
+    if (!input) return;
+
+    if (Array.isArray(input)) {
+      input.forEach((item) => collect(item));
+      return;
+    }
+
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return;
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('{') && trimmed.endsWith('}'))
+      ) {
+        const parsed = parseJsonSafely(trimmed);
+        if (parsed) {
+          collect(parsed);
+          return;
+        }
+      }
+      trimmed
+        .split(/[,|]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((item) => addCategory(item));
+      return;
+    }
+
+    const record = asRecord(input);
+    if (!record) return;
+    addCategory(record.name ?? record.category_name ?? record.title ?? record.label ?? record.slug ?? record.value);
+    if (record.category) collect(record.category);
+    if (record.categories) collect(record.categories);
+  };
+
+  const nestedInfluencer = asRecord(row.influencer);
+  const nestedProfile = asRecord(row.influencer_profile);
+  const nestedUser = asRecord(row.user);
+
+  [
+    row.category_id,
+    row.category_ids,
+    row.influencer_category_ids,
+    row.categories,
+    row.category,
+    row.category_name,
+    row.category_names,
+    row.influencer_categories,
+    row.tags,
+    row.niche,
+    row.niches,
+    row.specialization,
+    row.specializations,
+    row.interests,
+    nestedInfluencer?.category_id,
+    nestedInfluencer?.category_ids,
+    nestedInfluencer?.influencer_category_ids,
+    nestedInfluencer?.categories,
+    nestedInfluencer?.category,
+    nestedInfluencer?.category_name,
+    nestedInfluencer?.category_names,
+    nestedInfluencer?.influencer_categories,
+    nestedInfluencer?.tags,
+    nestedInfluencer?.niche,
+    nestedProfile?.category_id,
+    nestedProfile?.category_ids,
+    nestedProfile?.influencer_category_ids,
+    nestedProfile?.categories,
+    nestedProfile?.category,
+    nestedProfile?.category_name,
+    nestedProfile?.category_names,
+    nestedProfile?.influencer_categories,
+    nestedUser?.category_id,
+    nestedUser?.category_ids,
+    nestedUser?.categories,
+    nestedUser?.category,
+    nestedUser?.category_name,
+    nestedUser?.category_names,
+  ].forEach((source) => collect(source));
+
+  (fallback?.categories || []).forEach((item) => addCategory(item));
+  addCategory(fallback?.category);
+
+  return Array.from(categories);
+}
+
+function extractGalleryFromApi(row: Record<string, unknown>): string[] {
+  const urls = new Set<string>();
+  const push = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    if (!text) return;
+    if (/^https?:\/\//i.test(text) || text.startsWith('/')) urls.add(text);
+  };
+
+  const consume = (value: unknown) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => consume(item));
+      return;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('{') && trimmed.endsWith('}'))
+      ) {
+        const parsed = parseJsonSafely(trimmed);
+        if (parsed) {
+          consume(parsed);
+          return;
+        }
+      }
+      trimmed
+        .split(/[,\n\r\t|;]/)
+        .map((part) => part.trim().replace(/^['"`]+|['"`]+$/g, '').trim())
+        .filter(Boolean)
+        .forEach((part) => push(part));
+      return;
+    }
+    const obj = asRecord(value);
+    if (!obj) return;
+    push(
+      obj.image_path ??
+      obj.image_url ??
+      obj.url ??
+      obj.path ??
+      obj.secure_url ??
+      obj.gallery_pic ??
+      obj.gallery_image
+    );
+  };
+
+  const nestedInfluencer = asRecord(row.influencer);
+  const galleryCandidates = [
+    row.gallery_pic,
+    row.gallery,
+    row.gallery_images,
+    row.influencer_galleries,
+    row.influencer_gallery,
+    row.influencer_gallery_images,
+    nestedInfluencer?.gallery_pic,
+    nestedInfluencer?.gallery,
+    nestedInfluencer?.gallery_images,
+    nestedInfluencer?.influencer_galleries,
+    nestedInfluencer?.influencer_gallery,
+    nestedInfluencer?.influencer_gallery_images,
+  ];
+  galleryCandidates.forEach((item) => consume(item));
+
+  return Array.from(urls).slice(0, 10);
+}
+
+function mapPublicProfileToInfluencer(
+  row: Record<string, unknown>,
+  fallback?: Influencer,
+  categoryLookup?: Record<string, string>
+): ProfileInfluencer {
   const name = String(row.name || row.full_name || fallback?.name || 'Influencer');
   const slug = String(
     row.slug ||
@@ -442,16 +665,8 @@ function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: I
   const city = String(row.city_name || row.city || '').trim();
   const country = String(row.country_name || row.country || '').trim();
   const location = [city, country].filter(Boolean).join(', ') || fallback?.location || 'Not specified';
-  const categories = Array.isArray(row.categories)
-    ? row.categories.map((item) => String(item)).filter(Boolean)
-    : fallback?.categories || [];
-  const category = String(
-    row.category_name ||
-      row.category ||
-      categories[0] ||
-      fallback?.category ||
-      'General'
-  );
+  const categories = extractCategoryNamesFromProfileRow(row, fallback, categoryLookup);
+  const category = categories[0] || 'General';
 
   const platforms: Influencer['platforms'] = {
     instagram: parseNumber(row.instagram_followers, fallback?.platforms.instagram || 0),
@@ -473,19 +688,30 @@ function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: I
     rawPlatforms.forEach((platformItem) => {
       if (!platformItem || typeof platformItem !== 'object') return;
       const item = platformItem as Record<string, unknown>;
-      const platformName = normalizePlatformName(item.platform_name || item.name);
+      const nestedPlatform =
+        item.platform && typeof item.platform === 'object'
+          ? (item.platform as Record<string, unknown>)
+          : null;
+      const platformName = normalizePlatformName(item.platform_name || item.name || nestedPlatform?.name);
+      const platformId = parseNumber(item.platform_id ?? item.id ?? nestedPlatform?.id, 0);
       const followers = parseNumber(
         item.followers ??
           item.follower_count ??
           item.followers_count ??
-          item.total_followers,
+          item.total_followers ??
+          item.followersCount ??
+          (item.pivot && typeof item.pivot === 'object'
+            ? (item.pivot as Record<string, unknown>).followers
+            : undefined),
         0
       );
-      if (platformName.includes('instagram')) platforms.instagram = followers;
-      if (platformName.includes('youtube')) platforms.youtube = followers;
-      if (platformName.includes('tiktok')) platforms.tiktok = followers;
+      if (followers <= 0) return;
+      if (platformName.includes('instagram') || platformId === 1) platforms.instagram = followers;
+      if (platformName.includes('youtube') || platformId === 2) platforms.youtube = followers;
+      if (platformName.includes('tiktok') || platformId === 3) platforms.tiktok = followers;
     });
   }
+  const gallery = extractGalleryFromApi(row);
 
   return {
     id: String(row.id || row.user_id || row.influencer_id || fallback?.id || slug || 'public-profile'),
@@ -504,6 +730,7 @@ function mapPublicProfileToInfluencer(row: Record<string, unknown>, fallback?: I
     startingPrice: parseNumber(row.price_start ?? row.base_price, fallback?.startingPrice || 0),
     packages: Array.isArray(fallback?.packages) ? fallback.packages : [],
     portfolio: Array.isArray(fallback?.portfolio) ? fallback.portfolio : [],
+    gallery,
     rating: parseNumber(row.rating, fallback?.rating || 4.5),
     totalOrders: parseNumber(row.total_orders, fallback?.totalOrders || 0),
     engagement: String(
@@ -528,6 +755,23 @@ function extractInfluencerRowsFromListResponse(payload: unknown): Record<string,
   return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
 }
 
+function ensureProfileInfluencer(influencer: Influencer | null | undefined): ProfileInfluencer | null {
+  if (!influencer) return null;
+  const gallery = Array.isArray((influencer as any).gallery)
+    ? (influencer as any).gallery.filter(Boolean)
+    : [];
+  return { ...influencer, gallery };
+}
+
+function getPrimaryPlatformId(platforms: Influencer['platforms']): number | null {
+  const rankedPlatforms = [
+    { id: 1, followers: Number(platforms.instagram || 0) },
+    { id: 2, followers: Number(platforms.youtube || 0) },
+    { id: 3, followers: Number(platforms.tiktok || 0) },
+  ].sort((a, b) => b.followers - a.followers);
+  return rankedPlatforms[0].followers > 0 ? rankedPlatforms[0].id : null;
+}
+
 export function InfluencerProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -535,22 +779,20 @@ export function InfluencerProfile() {
   const [selectedPackage, setSelectedPackage] = useState('package-1');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const stateInfluencer = ((locationState.state as { influencer?: Influencer } | null)?.influencer) || null;
+  const [showAllGalleryModal, setShowAllGalleryModal] = useState(false);
+  const stateInfluencer = ((locationState.state as { influencer?: ProfileInfluencer } | null)?.influencer) || null;
   const stateRawProfile = asRecord(stateInfluencer?.rawApiData);
-  const [influencer, setInfluencer] = useState<Influencer | null>(stateInfluencer);
+  const [influencer, setInfluencer] = useState<ProfileInfluencer | null>(stateInfluencer);
   const [analyticsData, setAnalyticsData] = useState<ProfileAnalyticsData>(createDefaultAnalytics());
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [relatedInfluencers, setRelatedInfluencers] = useState<ProfileInfluencer[]>([]);
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  const [categoryLookup, setCategoryLookup] = useState<Record<string, string>>({});
   const [profileError, setProfileError] = useState('');
   const [refreshProfileTick, setRefreshProfileTick] = useState(0);
+  const relatedCarouselRef = useRef<HTMLDivElement | null>(null);
 
   const routeValue = String(id || '').trim();
-  const fallbackInfluencer = influencers.find(
-    (inf) =>
-      inf.id === routeValue ||
-      inf.slug === routeValue ||
-      inf.username.replace(/^@/, '') === routeValue
-  );
-
   useEffect(() => {
     if (!influencer) return;
     if (!routeValue || !isNumericLike(routeValue)) return;
@@ -560,10 +802,10 @@ export function InfluencerProfile() {
   }, [influencer, routeValue, navigate]);
 
   useEffect(() => {
-    if (!influencer && (stateInfluencer || fallbackInfluencer)) {
-      setInfluencer(stateInfluencer || fallbackInfluencer || null);
+    if (!influencer && stateInfluencer) {
+      setInfluencer(ensureProfileInfluencer(stateInfluencer || null));
     }
-  }, [stateInfluencer, fallbackInfluencer, influencer]);
+  }, [stateInfluencer, influencer]);
 
   // Scroll to top when component mounts or ID changes
   useEffect(() => {
@@ -591,20 +833,40 @@ export function InfluencerProfile() {
   }, []);
 
   useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/categories/get-all-categories`, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const lookup = extractCategoryLookupFromApiPayload(payload);
+        if (Object.keys(lookup).length > 0) {
+          setCategoryLookup(lookup);
+        }
+      } catch {
+        // Keep fallback to static categories.
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
     const fetchPublicProfile = async () => {
       if (!routeValue) return;
       setIsLoadingProfile(true);
       setProfileError('');
+      const profileFallback = stateInfluencer;
       setAnalyticsData(
         stateRawProfile ? extractAnalyticsFromProfile(stateRawProfile, stateRawProfile) : createDefaultAnalytics()
       );
 
       try {
-        const authToken =
-          localStorage.getItem('influencer_token') ||
-          localStorage.getItem('brand_token') ||
-          localStorage.getItem('token');
-        const candidates = collectSlugCandidates(routeValue, stateInfluencer, fallbackInfluencer);
+        const candidates = collectSlugCandidates(routeValue, stateInfluencer, undefined);
         const normalizedCandidates = candidates.map((item) => item.toLowerCase());
         let lastErrorMessage = 'Failed to load influencer public profile';
         let resolved = false;
@@ -616,14 +878,18 @@ export function InfluencerProfile() {
             cache: 'no-store',
             headers: {
               'Content-Type': 'application/json',
-              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
             },
             body: JSON.stringify({ slug: candidate }),
           });
           const result: PublicProfileResponse = await response.json();
 
           if (!response.ok) {
-            lastErrorMessage = result?.message || lastErrorMessage;
+            const message = String(result?.message || '').toLowerCase();
+            if (message.includes('unauthorized')) {
+              lastErrorMessage = 'Failed to load influencer public profile';
+            } else {
+              lastErrorMessage = result?.message || lastErrorMessage;
+            }
             continue;
           }
 
@@ -634,7 +900,7 @@ export function InfluencerProfile() {
           ) as Record<string, unknown>;
           const safeProfileData = extractProfilePayload(result?.data);
 
-          setInfluencer(mapPublicProfileToInfluencer(safeProfileData, fallbackInfluencer));
+          setInfluencer(mapPublicProfileToInfluencer(safeProfileData, profileFallback || undefined, categoryLookup));
           setAnalyticsData(extractAnalyticsFromProfile(safeProfileData, rawData));
           setProfileError('');
           resolved = true;
@@ -650,14 +916,11 @@ export function InfluencerProfile() {
                 cache: 'no-store',
                 headers: {
                   'Content-Type': 'application/json',
-                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
                 },
                 body: JSON.stringify({
-                  platform_id: [],
-                  category_id: [],
                   keyword: candidate,
                   page: 1,
-                  limit: 30,
+                  limit: 100,
                 }),
               });
 
@@ -671,7 +934,7 @@ export function InfluencerProfile() {
               });
 
               if (matchedRow) {
-                setInfluencer(mapPublicProfileToInfluencer(matchedRow, fallbackInfluencer));
+                setInfluencer(mapPublicProfileToInfluencer(matchedRow, profileFallback || undefined, categoryLookup));
                 setAnalyticsData(extractAnalyticsFromProfile(matchedRow, matchedRow));
                 setProfileError('');
                 resolved = true;
@@ -681,23 +944,21 @@ export function InfluencerProfile() {
 
             // Broad fallback if keyword search misses due backend indexing quirks.
             if (!resolved) {
-              const broadListResponse = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
-                method: 'POST',
-                cache: 'no-store',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-                },
-                body: JSON.stringify({
-                  platform_id: [],
-                  category_id: [],
-                  keyword: '',
-                  page: 1,
-                  limit: 120,
-                }),
-              });
+              for (let page = 1; page <= 5 && !resolved; page += 1) {
+                const broadListResponse = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+                  method: 'POST',
+                  cache: 'no-store',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    keyword: '',
+                    page,
+                    limit: 100,
+                  }),
+                });
 
-              if (broadListResponse.ok) {
+                if (!broadListResponse.ok) continue;
                 const broadListResult: InfluencerListResponse = await broadListResponse.json();
                 const broadRows = extractInfluencerRowsFromListResponse(broadListResult);
                 const matchedRow = broadRows.find((row: Record<string, unknown>) => {
@@ -707,7 +968,7 @@ export function InfluencerProfile() {
                 });
 
                 if (matchedRow) {
-                  setInfluencer(mapPublicProfileToInfluencer(matchedRow, fallbackInfluencer));
+                  setInfluencer(mapPublicProfileToInfluencer(matchedRow, profileFallback || undefined, categoryLookup));
                   setAnalyticsData(extractAnalyticsFromProfile(matchedRow, matchedRow));
                   setProfileError('');
                   resolved = true;
@@ -729,8 +990,8 @@ export function InfluencerProfile() {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to load profile';
-        if (stateInfluencer || fallbackInfluencer) {
-          setInfluencer(stateInfluencer || fallbackInfluencer || null);
+        if (stateInfluencer) {
+          setInfluencer(ensureProfileInfluencer(stateInfluencer || null));
           setProfileError('');
         } else {
           setInfluencer(null);
@@ -742,7 +1003,80 @@ export function InfluencerProfile() {
     };
 
     fetchPublicProfile();
-  }, [routeValue, stateInfluencer, fallbackInfluencer, stateRawProfile, refreshProfileTick]);
+  }, [routeValue, stateInfluencer, stateRawProfile, refreshProfileTick, categoryLookup]);
+
+  useEffect(() => {
+    const fetchRelatedInfluencers = async () => {
+      if (!influencer) {
+        setRelatedInfluencers([]);
+        return;
+      }
+
+      setIsLoadingRelated(true);
+
+      try {
+        const primaryPlatformId = getPrimaryPlatformId(influencer.platforms);
+        const payloads: Array<Record<string, unknown>> = primaryPlatformId
+          ? [
+              { keyword: '', page: 1, limit: 50, platform_id: [primaryPlatformId] },
+              { keyword: '', page: 1, limit: 50 },
+            ]
+          : [{ keyword: '', page: 1, limit: 50 }];
+
+        let rows: Record<string, unknown>[] = [];
+
+        for (const payload of payloads) {
+          const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+            method: 'POST',
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) continue;
+          const result: InfluencerListResponse = await response.json();
+          const nextRows = extractInfluencerRowsFromListResponse(result);
+          if (nextRows.length === 0) continue;
+          rows = nextRows;
+          if (payload.platform_id) break;
+        }
+
+        const currentIdentityKeys = new Set(
+          collectIdentityCandidatesFromProfile({
+            id: influencer.id,
+            slug: influencer.slug,
+            username: influencer.username,
+            name: influencer.name,
+          })
+            .map((value) => value.toLowerCase())
+            .filter(Boolean)
+        );
+
+        const filteredMapped = rows
+          .filter((row) => {
+            const rowIdentityKeys = collectIdentityCandidatesFromProfile(row)
+              .map((value) => value.toLowerCase())
+              .filter(Boolean);
+            return !rowIdentityKeys.some((key) => currentIdentityKeys.has(key));
+          })
+          .map((row) => mapPublicProfileToInfluencer(row, undefined, categoryLookup))
+          .filter((row) => String(row.id).trim().length > 0);
+
+        const deduped = Array.from(
+          new Map(filteredMapped.map((item) => [String(item.id), item])).values()
+        );
+
+        setRelatedInfluencers(deduped.slice(0, 20));
+      } catch {
+        setRelatedInfluencers([]);
+      } finally {
+        setIsLoadingRelated(false);
+      }
+    };
+
+    fetchRelatedInfluencers();
+  }, [influencer?.id, influencer?.slug, influencer?.platforms.instagram, influencer?.platforms.youtube, influencer?.platforms.tiktok, categoryLookup]);
 
   if (isLoadingProfile && !influencer) {
     return <div className="min-h-screen flex items-center justify-center bg-white text-gray-600">Loading profile...</div>;
@@ -786,7 +1120,7 @@ export function InfluencerProfile() {
     {
       key: 'tiktok',
       followers: influencer.platforms.tiktok,
-      Icon: Video,
+      Icon: TikTokIcon,
       className: 'bg-gray-100 text-gray-700 border border-gray-300',
     },
   ].filter((item) => item.followers > 0);
@@ -800,13 +1134,14 @@ export function InfluencerProfile() {
     )
   );
 
-  // Mock portfolio images for carousel
-  const portfolioImages = [
-    influencer.profileImage,
-    influencer.coverImage || influencer.profileImage,
-    influencer.portfolio[0]?.url || influencer.profileImage,
-    influencer.portfolio[1]?.url || influencer.profileImage,
-  ];
+  const galleryImages = Array.isArray(influencer.gallery)
+    ? Array.from(new Set(influencer.gallery.filter(Boolean)))
+    : [];
+  const portfolioImages = (
+    galleryImages.length > 0
+      ? galleryImages
+      : (!isLoadingProfile ? [influencer.profileImage] : [])
+  ).slice(0, 10);
   const audienceLocationData = analyticsData.audienceLocation;
   const audienceAgeData = analyticsData.audienceAge;
   const genderData = analyticsData.audienceGender;
@@ -851,14 +1186,22 @@ export function InfluencerProfile() {
     },
   ];
 
-  const similarInfluencers = influencers.filter((inf) => inf.id !== influencer.id).slice(0, 3);
-
   const handlePrevImage = () => {
     setCurrentImageIndex((prev) => (prev === 0 ? portfolioImages.length - 1 : prev - 1));
   };
 
   const handleNextImage = () => {
     setCurrentImageIndex((prev) => (prev === portfolioImages.length - 1 ? 0 : prev + 1));
+  };
+
+  const scrollRelatedCarousel = (direction: 'left' | 'right') => {
+    const container = relatedCarouselRef.current;
+    if (!container) return;
+    const scrollAmount = Math.max(320, Math.round(container.clientWidth * 0.8));
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
   };
 
   return (
@@ -923,79 +1266,94 @@ export function InfluencerProfile() {
             {/* Image Carousel - Mobile */}
             {isMobile ? (
               <div className="relative -mx-4">
-                <div 
-                  className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
-                  onScroll={(e) => {
-                    const scrollLeft = e.currentTarget.scrollLeft;
-                    const width = e.currentTarget.offsetWidth;
-                    const index = Math.round(scrollLeft / width);
-                    setCurrentImageIndex(index);
-                  }}
-                >
-                  {portfolioImages.map((image, index) => (
-                    <div
-                      key={index}
-                      className="w-full flex-shrink-0 snap-start"
-                    >
-                      <img
-                        src={image}
-                        alt={`${influencer.name} - ${index + 1}`}
-                        className="w-full h-[400px] object-cover"
-                      />
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Image Counter */}
-                <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-medium">
-                  {currentImageIndex + 1}/{portfolioImages.length}
-                </div>
-
-                {/* Carousel Dots */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-                  {portfolioImages.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        const carousel = document.querySelector('.flex.overflow-x-auto');
-                        if (carousel) {
-                          carousel.scrollTo({
-                            left: index * carousel.clientWidth,
-                            behavior: 'smooth',
-                          });
-                        }
+                {portfolioImages.length === 0 ? (
+                  <div className="w-full h-[400px] bg-gray-100 animate-pulse" />
+                ) : (
+                  <>
+                    <div 
+                      className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+                      onScroll={(e) => {
+                        const scrollLeft = e.currentTarget.scrollLeft;
+                        const width = e.currentTarget.offsetWidth;
+                        const index = Math.round(scrollLeft / width);
+                        setCurrentImageIndex(index);
                       }}
-                      className={`h-1.5 rounded-full transition-all ${
-                        index === currentImageIndex 
-                          ? 'w-6 bg-white' 
-                          : 'w-1.5 bg-white/50'
-                      }`}
-                    />
-                  ))}
-                </div>
+                    >
+                      {portfolioImages.map((image, index) => (
+                        <div
+                          key={index}
+                          className="w-full flex-shrink-0 snap-start"
+                        >
+                          <img
+                            src={image}
+                            alt={`${influencer.name} - ${index + 1}`}
+                            className="w-full h-[400px] object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Image Counter */}
+                    <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-medium">
+                      {currentImageIndex + 1}/{portfolioImages.length}
+                    </div>
+
+                    {/* Carousel Dots */}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {portfolioImages.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            const carousel = document.querySelector('.flex.overflow-x-auto');
+                            if (carousel) {
+                              carousel.scrollTo({
+                                left: index * carousel.clientWidth,
+                                behavior: 'smooth',
+                              });
+                            }
+                          }}
+                          className={`h-1.5 rounded-full transition-all ${
+                            index === currentImageIndex 
+                              ? 'w-6 bg-white' 
+                              : 'w-1.5 bg-white/50'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               /* Desktop Image Gallery */
               <div className="grid grid-cols-3 gap-4">
-                {portfolioImages.slice(0, 3).map((image, index) => (
-                  <div key={index} className="aspect-[3/4] rounded-lg overflow-hidden relative">
-                    <img
-                      src={image}
-                      alt={influencer.name}
-                      className="w-full h-full object-cover"
-                    />
-                    {index === 2 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="absolute bottom-4 right-4 bg-white hover:bg-gray-100 text-gray-900 shadow-lg text-xs"
-                      >
-                        <Camera className="w-3 h-3 mr-1" />
-                        Show All
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                {portfolioImages.length === 0 ? (
+                  <>
+                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
+                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
+                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
+                  </>
+                ) : (
+                  portfolioImages.slice(0, 3).map((image, index) => (
+                    <div key={index} className="aspect-[3/4] rounded-lg overflow-hidden relative">
+                      <img
+                        src={image}
+                        alt={influencer.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {index === 2 && portfolioImages.length > 3 && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setShowAllGalleryModal(true)}
+                          className="absolute bottom-4 right-4 bg-white hover:bg-gray-100 text-gray-900 shadow-lg text-xs"
+                        >
+                          <Camera className="w-3 h-3 mr-1" />
+                          Show All
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
@@ -1421,37 +1779,72 @@ export function InfluencerProfile() {
                 <Separator className="bg-gray-200" />
                 <div>
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-bold text-gray-900">Influencers similar to {influencer.name}</h2>
-                    <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                      <ChevronRight className="w-5 h-5" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    {similarInfluencers.map((inf) => (
-                      <div 
-                        key={inf.id} 
-                        className="cursor-pointer group"
-                        onClick={() => navigate(`/influencer/${inf.slug || inf.id}`)}
+                    <h2 className="text-2xl font-bold text-gray-900">Related Influencers</h2>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-gray-600 hover:text-gray-900"
+                        onClick={() => scrollRelatedCarousel('left')}
                       >
-                        <div className="aspect-[3/4] rounded-lg overflow-hidden mb-3">
-                          <img
-                            src={inf.profileImage}
-                            alt={inf.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="secondary" className="text-xs bg-gray-100">
-                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
-                            {inf.rating}
-                          </Badge>
-                          <span className="text-xs text-gray-600">{inf.category}</span>
-                        </div>
-                        <p className="text-sm font-semibold text-gray-900">{inf.name}</p>
-                        <p className="text-sm text-gray-600">${inf.startingPrice}</p>
-                      </div>
-                    ))}
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-gray-600 hover:text-gray-900"
+                        onClick={() => scrollRelatedCarousel('right')}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
+                  {isLoadingRelated ? (
+                    <div className="text-sm text-gray-500 py-4">Loading related influencers...</div>
+                  ) : relatedInfluencers.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-4">No related influencers found.</div>
+                  ) : (
+                    <div
+                      ref={relatedCarouselRef}
+                      className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin"
+                    >
+                      {relatedInfluencers.map((inf) => (
+                        <div 
+                          key={inf.id} 
+                          className="cursor-pointer group shrink-0 w-[300px] snap-start"
+                          onClick={() => navigate(`/influencer/${inf.slug || inf.id}`)}
+                        >
+                          <div className="aspect-[3/4] rounded-lg overflow-hidden mb-3">
+                            <img
+                              src={inf.profileImage}
+                              alt={inf.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="secondary" className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200">
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
+                              Rating {Number.isFinite(Number(inf.rating)) ? Number(inf.rating).toFixed(1) : 'N/A'}
+                            </Badge>
+                            <span className="text-xs text-gray-700 font-medium">
+                              {(() => {
+                                const categories = Array.isArray(inf.categories) ? inf.categories : [];
+                                const firstMeaningfulCategory = categories.find(
+                                  (item) => String(item || '').trim().toLowerCase() !== 'general'
+                                );
+                                const directCategory = String(inf.category || '').trim();
+                                if (firstMeaningfulCategory) return firstMeaningfulCategory;
+                                if (directCategory && directCategory.toLowerCase() !== 'general') return directCategory;
+                                return 'Influencer';
+                              })()}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">{inf.name}</p>
+                          <p className="text-sm text-gray-600">${inf.startingPrice}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1485,6 +1878,41 @@ export function InfluencerProfile() {
           )}
         </div>
       </div>
+
+      {/* Show All Gallery Modal */}
+      {showAllGalleryModal && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setShowAllGalleryModal(false)}
+        >
+          <div
+            className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-3xl p-5 md:p-8 overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-4 rounded-full bg-gray-100 hover:bg-gray-200"
+              onClick={() => setShowAllGalleryModal(false)}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
+              {portfolioImages.map((image, index) => (
+                <div key={`${image}-${index}`} className="aspect-[3/4] rounded-md overflow-hidden">
+                  <img
+                    src={image}
+                    alt={`${influencer.name} gallery ${index + 1}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sticky Bottom CTA - Mobile Only */}
       {isMobile && (

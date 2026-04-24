@@ -143,6 +143,13 @@ const COUNTRIES = [
   'Bangladesh',
   'Other',
 ];
+const toSlug = (value: string) =>
+  String(value ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 
 export function InfluencerAnalytics() {
   const [activePlatform, setActivePlatform] = useState<PlatformType>('instagram');
@@ -169,12 +176,198 @@ export function InfluencerAnalytics() {
     if (value === null || value === undefined) return fallback;
     return String(value);
   };
+  const parseJsonSafely = (value: string) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+  const toArrayData = (value: unknown): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = parseJsonSafely(value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+    return [];
+  };
+  const toObjectData = (value: unknown): Record<string, any> | null => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+    if (typeof value === 'string') {
+      const parsed = parseJsonSafely(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>;
+      }
+    }
+    return null;
+  };
   const toPositiveString = (value: unknown, fallback = '') => {
     const str = toStringValue(value, '').trim();
     if (!str) return fallback;
     const numeric = parseFloat(str.replace(/,/g, '').replace('%', ''));
     if (Number.isFinite(numeric) && numeric <= 0) return fallback;
     return str;
+  };
+  const pickGenderValue = (
+    source: Record<string, any>,
+    keys: string[],
+    fallback = ''
+  ) => {
+    for (const key of keys) {
+      if (!(key in source)) continue;
+      return toPositiveString(source[key], fallback);
+    }
+    return fallback;
+  };
+  const parseAudienceGender = (
+    raw: unknown,
+    current: AnalyticsState['audienceGender']
+  ): AnalyticsState['audienceGender'] => {
+    const next = { ...current };
+    const obj = toObjectData(raw);
+
+    if (obj) {
+      const normalized = Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [String(key).toLowerCase(), value])
+      ) as Record<string, any>;
+
+      next.female = pickGenderValue(
+        normalized,
+        ['female', 'females', 'women', 'woman', 'female_percentage', 'female_pct', 'f'],
+        next.female
+      );
+      next.male = pickGenderValue(
+        normalized,
+        ['male', 'males', 'men', 'man', 'male_percentage', 'male_pct', 'm'],
+        next.male
+      );
+      next.other = pickGenderValue(
+        normalized,
+        ['other', 'others', 'non_binary', 'non-binary', 'other_percentage', 'other_pct', 'o'],
+        next.other
+      );
+    }
+
+    const asArray = toArrayData(raw);
+    if (asArray.length > 0) {
+      asArray.forEach((entry: any) => {
+        const row = toObjectData(entry);
+        if (!row) return;
+        const rowNormalized = Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [String(key).toLowerCase(), value])
+        ) as Record<string, any>;
+        next.female = pickGenderValue(
+          rowNormalized,
+          ['female', 'females', 'women', 'woman', 'female_percentage', 'female_pct', 'f'],
+          next.female
+        );
+        next.male = pickGenderValue(
+          rowNormalized,
+          ['male', 'males', 'men', 'man', 'male_percentage', 'male_pct', 'm'],
+          next.male
+        );
+        next.other = pickGenderValue(
+          rowNormalized,
+          ['other', 'others', 'non_binary', 'non-binary', 'other_percentage', 'other_pct', 'o'],
+          next.other
+        );
+        const key = String(
+          row.gender ??
+            row.sex ??
+            row.name ??
+            row.label ??
+            row.type ??
+            row.segment ??
+            row.category ??
+            row.key ??
+            row.title ??
+            ''
+        ).trim().toLowerCase();
+        const value =
+          row.percentage ??
+          row.percent ??
+          row.pct ??
+          row.value ??
+          row.count ??
+          row.total ??
+          row.share ??
+          row.ratio;
+        if (!key) return;
+        if (key.includes('female') || key.includes('woman') || key.includes('women') || key === 'f') {
+          next.female = toPositiveString(value, next.female);
+        } else if (key.includes('male') || key.includes('man') || key.includes('men') || key === 'm') {
+          next.male = toPositiveString(value, next.male);
+        } else if (key.includes('other') || key.includes('non')) {
+          next.other = toPositiveString(value, next.other);
+        }
+      });
+    }
+
+    return next;
+  };
+
+  const mergeAudienceGenderFromProfile = (
+    profile: any,
+    current: AnalyticsState['audienceGender']
+  ): AnalyticsState['audienceGender'] => {
+    let next = { ...current };
+    const candidates: unknown[] = [
+      profile?.influencer_audience_genders,
+      profile?.influencer_audience_gender,
+      profile?.audience_genders,
+      profile?.audience_gender,
+      profile?.audienceGender,
+      profile?.gender,
+      profile?.genders,
+      profile?.sex,
+      profile?.demographics?.gender,
+      profile?.demographics?.genders,
+      profile?.audience_demographics?.gender,
+      profile?.audience_demographics?.genders,
+      profile?.influencer?.influencer_audience_genders,
+      profile?.influencer?.influencer_audience_gender,
+      profile?.influencer?.audience_genders,
+      profile?.influencer?.audience_gender,
+      profile?.influencer?.audienceGender,
+      profile?.influencer?.demographics?.gender,
+      profile?.influencer?.audience_demographics?.gender,
+    ];
+
+    const seen = new WeakSet<object>();
+    const walk = (value: unknown, depth = 0) => {
+      if (depth > 3 || value == null) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => walk(item, depth + 1));
+        return;
+      }
+      const obj = toObjectData(value);
+      if (!obj) return;
+      if (seen.has(obj)) return;
+      seen.add(obj);
+      Object.entries(obj).forEach(([key, val]) => {
+        const normalizedKey = String(key).toLowerCase();
+        if (
+          normalizedKey.includes('gender') ||
+          normalizedKey.includes('genders') ||
+          normalizedKey === 'sex'
+        ) {
+          candidates.push(val);
+        }
+        if (val && (Array.isArray(val) || typeof val === 'object')) {
+          walk(val, depth + 1);
+        }
+      });
+    };
+
+    walk(profile);
+
+    candidates
+      .filter((candidate) => candidate !== undefined && candidate !== null)
+      .forEach((candidate) => {
+        next = parseAudienceGender(candidate, next);
+      });
+
+    return next;
   };
 
   const mergeApiProfileIntoAnalytics = (profile: any, current: AnalyticsState): AnalyticsState => {
@@ -189,7 +382,10 @@ export function InfluencerAnalytics() {
       audienceGender: { ...current.audienceGender },
     };
 
-    const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+    const socialAccounts =
+      toArrayData(profile?.social_accounts).length > 0
+        ? toArrayData(profile?.social_accounts)
+        : toArrayData(profile?.influencer_social_accounts);
     socialAccounts.forEach((account: any) => {
       const platformKey = PLATFORM_ID_TO_KEY[Number(account?.platform_id)];
       if (!platformKey) return;
@@ -204,36 +400,56 @@ export function InfluencerAnalytics() {
       };
     });
 
-    const audienceLocations = profile?.audience_locations || profile?.audienceLocation;
-    if (Array.isArray(audienceLocations) && audienceLocations.length > 0) {
-      merged.audienceLocation = audienceLocations.map((item: any) => ({
+    const audienceLocations =
+      profile?.influencer_audience_locations ??
+      profile?.audience_locations ??
+      profile?.audienceLocation;
+    const audienceLocationArray = toArrayData(audienceLocations);
+    if (audienceLocationArray.length > 0) {
+      merged.audienceLocation = audienceLocationArray.map((item: any) => ({
         country: toStringValue(item?.country),
         percentage: toPositiveString(item?.percentage, ''),
       }));
+    } else {
+      const locationObject = toObjectData(audienceLocations);
+      if (locationObject) {
+        merged.audienceLocation = Object.entries(locationObject).map(([country, percentage]) => ({
+          country: toStringValue(country),
+          percentage: toPositiveString(percentage, ''),
+        }));
+      }
     }
 
-    const audienceAge = profile?.audience_age || profile?.audienceAge;
-    if (Array.isArray(audienceAge) && audienceAge.length > 0) {
-      merged.audienceAge = audienceAge.map((item: any) => ({
+    const audienceAge =
+      profile?.influencer_audience_ages ??
+      profile?.audience_age ??
+      profile?.audienceAge;
+    const audienceAgeArray = toArrayData(audienceAge);
+    if (audienceAgeArray.length > 0) {
+      merged.audienceAge = audienceAgeArray.map((item: any) => ({
         range: toStringValue(item?.age_range ?? item?.range),
         percentage: toPositiveString(item?.percentage, ''),
       }));
+    } else {
+      const ageObject = toObjectData(audienceAge);
+      if (ageObject) {
+        merged.audienceAge = Object.entries(ageObject).map(([range, percentage]) => ({
+          range: toStringValue(range),
+          percentage: toPositiveString(percentage, ''),
+        }));
+      }
     }
 
-    const audienceGender = profile?.audience_gender || profile?.audienceGender;
-    if (audienceGender && typeof audienceGender === 'object') {
-      merged.audienceGender = {
-        female: toPositiveString(audienceGender?.female, merged.audienceGender.female),
-        male: toPositiveString(audienceGender?.male, merged.audienceGender.male),
-        other: toPositiveString(audienceGender?.other, merged.audienceGender.other),
-      };
-    }
+    merged.audienceGender = mergeAudienceGenderFromProfile(profile, merged.audienceGender);
 
     return merged;
   };
 
   const extractPlatformMeta = (profile: any): Record<PlatformType, PlatformMeta> => {
-    const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+    const socialAccounts =
+      toArrayData(profile?.social_accounts).length > 0
+        ? toArrayData(profile?.social_accounts)
+        : toArrayData(profile?.influencer_social_accounts);
     const meta: Record<PlatformType, PlatformMeta> = {
       instagram: { username: '', profile_url: '' },
       tiktok: { username: '', profile_url: '' },
@@ -262,6 +478,151 @@ export function InfluencerAnalytics() {
     if (raw.endsWith('m')) return Math.round(numeric * 1000000);
     if (raw.endsWith('b')) return Math.round(numeric * 1000000000);
     return Math.round(numeric);
+  };
+  const hasGenderValues = (gender: AnalyticsState['audienceGender']) => {
+    const female = parseFloat(String(gender.female ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    const male = parseFloat(String(gender.male ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    const other = parseFloat(String(gender.other ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    return female > 0 || male > 0 || other > 0;
+  };
+  const buildProfileIdentityCandidates = (profile: any): string[] => {
+    const user = toObjectData(profile?.user);
+    const influencer = toObjectData(profile?.influencer);
+    const cachedUser = (() => {
+      try {
+        const raw = localStorage.getItem('influencer_user');
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = [
+      profile?.slug,
+      profile?.username,
+      String(profile?.username ?? '').replace(/^@/, ''),
+      profile?.handle,
+      profile?.name,
+      toSlug(profile?.name),
+      profile?.id,
+      profile?.user_id,
+      profile?.influencer_id,
+      user?.slug,
+      user?.username,
+      String(user?.username ?? '').replace(/^@/, ''),
+      user?.name,
+      toSlug(user?.name),
+      user?.id,
+      influencer?.slug,
+      influencer?.username,
+      String(influencer?.username ?? '').replace(/^@/, ''),
+      influencer?.name,
+      toSlug(influencer?.name),
+      influencer?.id,
+      cachedUser?.slug,
+      cachedUser?.username,
+      String(cachedUser?.username ?? '').replace(/^@/, ''),
+      cachedUser?.name,
+      toSlug(cachedUser?.name),
+      cachedUser?.id,
+      cachedUser?.user_id,
+      cachedUser?.influencer_id,
+      String(cachedUser?.email ?? '').split('@')[0],
+    ]
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean);
+    return Array.from(new Set(candidates));
+  };
+  const fetchPublicProfileFromListFallback = async (token: string, profile: any) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/influencers/list?page=1&limit=200`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const result = await response.json();
+      const items = Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.data?.data)
+          ? result.data.data
+          : [];
+      if (!items.length) return null;
+
+      const identityCandidates = buildProfileIdentityCandidates(profile).map((value) =>
+        String(value).toLowerCase()
+      );
+      const currentNameSlug = toSlug(profile?.name ?? profile?.influencer?.name ?? '');
+      const currentName = String(profile?.name ?? profile?.influencer?.name ?? '').toLowerCase();
+      const currentUserId = String(profile?.user_id ?? profile?.user?.id ?? '').trim();
+      const currentInfluencerId = String(profile?.influencer_id ?? profile?.id ?? '').trim();
+
+      const matched = items.find((row: any) => {
+        const rowCandidates = [
+          row?.slug,
+          row?.username,
+          String(row?.username ?? '').replace(/^@/, ''),
+          row?.id,
+          row?.user_id,
+          row?.influencer_id,
+          row?.name,
+          toSlug(row?.name),
+          row?.user?.id,
+          row?.user?.username,
+          String(row?.user?.username ?? '').replace(/^@/, ''),
+          row?.influencer?.id,
+          row?.influencer?.username,
+          String(row?.influencer?.username ?? '').replace(/^@/, ''),
+        ]
+          .map((item) => String(item ?? '').toLowerCase().trim())
+          .filter(Boolean);
+
+        if (rowCandidates.some((value) => identityCandidates.includes(value))) return true;
+        if (currentNameSlug && rowCandidates.includes(currentNameSlug)) return true;
+        if (currentName && rowCandidates.includes(currentName)) return true;
+        if (currentUserId && rowCandidates.includes(currentUserId.toLowerCase())) return true;
+        if (currentInfluencerId && rowCandidates.includes(currentInfluencerId.toLowerCase())) return true;
+        return false;
+      });
+
+      if (!matched) return null;
+      const lookupKey =
+        matched?.slug ||
+        matched?.username ||
+        matched?.id ||
+        matched?.influencer_id ||
+        matched?.user_id;
+      if (!lookupKey) return null;
+
+      return await fetchPublicProfileFallback({ ...profile, ...matched, slug: matched?.slug ?? profile?.slug });
+    } catch {
+      return null;
+    }
+  };
+  const fetchPublicProfileFallback = async (profile: any) => {
+    const candidates = buildProfileIdentityCandidates(profile);
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/influencers/public-profile/${encodeURIComponent(candidate)}`,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+        const result = await response.json();
+        if (!(result?.success || response.ok) || !result?.data) continue;
+        const payload =
+          (result.data?.influencer && typeof result.data.influencer === 'object'
+            ? result.data.influencer
+            : result.data) || {};
+        if (payload && typeof payload === 'object') return payload;
+      } catch {
+        // Try next candidate
+      }
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -316,11 +677,24 @@ export function InfluencerAnalytics() {
 
       const profileData = result.data || {};
       setPlatformMeta(extractPlatformMeta(profileData));
+      let merged: AnalyticsState = DEFAULT_ANALYTICS_DATA;
       setAnalyticsData((prev) => {
-        const merged = mergeApiProfileIntoAnalytics(profileData, prev);
+        merged = mergeApiProfileIntoAnalytics(profileData, prev);
         persistAnalytics(merged);
         return merged;
       });
+
+      if (!hasGenderValues(merged.audienceGender)) {
+        let publicProfileData = await fetchPublicProfileFallback(profileData);
+        if (!publicProfileData) {
+          publicProfileData = await fetchPublicProfileFromListFallback(token, profileData);
+        }
+        if (publicProfileData) {
+          merged = mergeApiProfileIntoAnalytics(publicProfileData, merged);
+          setAnalyticsData(merged);
+          persistAnalytics(merged);
+        }
+      }
       window.dispatchEvent(new Event('influencer-analytics-updated'));
       window.dispatchEvent(new Event('influencer-profile-updated'));
     } catch {
@@ -399,8 +773,12 @@ export function InfluencerAnalytics() {
     }
 
     const toPercentage = (value: string) => {
-      const parsed = Number(value);
+      const raw = String(value ?? '').trim();
+      const parsed = Number(raw.replace(/,/g, '').replace('%', ''));
       if (!Number.isFinite(parsed)) return 0;
+      if (!raw.includes('%') && raw.includes('.') && parsed > 0 && parsed <= 1) {
+        return Math.max(0, Math.min(100, parsed * 100));
+      }
       return Math.max(0, Math.min(100, parsed));
     };
 
@@ -409,9 +787,15 @@ export function InfluencerAnalytics() {
       female: toPercentage(analyticsData.audienceGender.female),
       other: toPercentage(analyticsData.audienceGender.other),
     };
-    const filteredGenderPayload = Object.fromEntries(
-      Object.entries(genderPayload).filter(([, value]) => value > 0)
-    );
+    const hasGenderValues = Object.values(genderPayload).some((value) => value > 0);
+    const genderRequestPayload = {
+      ...genderPayload,
+      audience_gender: genderPayload,
+      audience_genders: genderPayload,
+      influencer_audience_gender: genderPayload,
+      influencer_audience_genders: genderPayload,
+      gender: genderPayload,
+    };
 
     const audienceAgePayload = {
       audience_age: analyticsData.audienceAge
@@ -438,7 +822,7 @@ export function InfluencerAnalytics() {
       const requests: Promise<Response>[] = [];
       const requestKinds: Array<'gender' | 'age' | 'location'> = [];
 
-      if (Object.keys(filteredGenderPayload).length > 0) {
+      if (hasGenderValues) {
         requests.push(
           fetch(`${API_BASE_URL}/influencers/update-audience-gender`, {
             method: 'PUT',
@@ -446,7 +830,7 @@ export function InfluencerAnalytics() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify(filteredGenderPayload),
+            body: JSON.stringify(genderRequestPayload),
           })
         );
         requestKinds.push('gender');
@@ -598,23 +982,33 @@ export function InfluencerAnalytics() {
     if (Number.isFinite(asNumber) && asNumber <= 0) return '';
     return normalized;
   };
+  const toChartPercent = (value: unknown) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+    const numeric = Number(raw.replace(/,/g, '').replace('%', ''));
+    if (!Number.isFinite(numeric)) return 0;
+    if (!raw.includes('%') && raw.includes('.') && numeric > 0 && numeric <= 1) {
+      return Math.round(numeric * 1000) / 10;
+    }
+    return Math.max(0, Math.min(100, numeric));
+  };
 
   // Prepare data for charts
   const ageChartData = analyticsData.audienceAge
     .map((item) => ({
       age: item.range,
-      value: parseInt(item.percentage) || 0,
+      value: toChartPercent(item.percentage),
     }))
     .filter((item) => item.value > 0);
 
   const genderChartData = [
-    { name: 'Female', value: parseInt(analyticsData.audienceGender.female) || 0 },
-    { name: 'Male', value: parseInt(analyticsData.audienceGender.male) || 0 },
-    { name: 'Other', value: parseInt(analyticsData.audienceGender.other) || 0 },
+    { name: 'Female', value: toChartPercent(analyticsData.audienceGender.female) },
+    { name: 'Male', value: toChartPercent(analyticsData.audienceGender.male) },
+    { name: 'Other', value: toChartPercent(analyticsData.audienceGender.other) },
   ].filter((item) => item.value > 0);
   const totalGenderValue = genderChartData.reduce((sum, item) => sum + item.value, 0);
   const visibleLocations = analyticsData.audienceLocation.filter(
-    (location) => location.country.trim() && (Number(location.percentage) || 0) > 0
+    (location) => location.country.trim() && toChartPercent(location.percentage) > 0
   );
 
   const COLORS = {

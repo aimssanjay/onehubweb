@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent, type DragEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { Button } from '@/app/components/ui/button';
@@ -38,6 +38,12 @@ type PlatformFormItem = {
   followers: string;
   engagement_rate: string;
   total_reach: string;
+};
+type GalleryImageItem = {
+  id: string;
+  preview: string;
+  file?: File;
+  name?: string;
 };
 
 const PLATFORM_CONFIG = [
@@ -106,11 +112,111 @@ const DEFAULT_ANALYTICS_DATA: SharedAnalyticsData = {
   audienceAge: [],
   audienceGender: { female: '', male: '', other: '' },
 };
+const toSlug = (value: string) =>
+  String(value ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 
 const isLegacySeededAnalytics = (data: any) =>
   data?.instagram?.followers === '1.5M' ||
   data?.tiktok?.followers === '850k' ||
   data?.youtube?.followers === '2.3M';
+
+const extractGalleryImageUrls = (source: any): string[] => {
+  const candidates: unknown[] = [
+    source?.gallery,
+    source?.gallery_images,
+    source?.influencer_galleries,
+    source?.gallery_pics,
+    source?.gallery_pic,
+    source?.portfolio,
+    source?.portfolio_images,
+    source?.galleryPhotos,
+    source?.influencer_gallery,
+    source?.influencer_gallery_images,
+    source?.images,
+    source?.media,
+    source?.data,
+    source?.influencer?.gallery,
+    source?.influencer?.gallery_images,
+    source?.influencer?.influencer_galleries,
+    source?.influencer?.gallery_pic,
+    source?.influencer?.influencer_gallery,
+  ];
+
+  const urls = new Set<string>();
+  const pushUrlsFromText = (input: string) => {
+    const normalized = input
+      .replace(/\\\//g, '/')
+      .replace(/^\[|\]$/g, '');
+    normalized
+      .split(/[,\n\r\t|;]/)
+      .map((part) =>
+        part
+          .trim()
+          .replace(/^['"`]+|['"`]+$/g, '')
+          .trim()
+      )
+      .filter(Boolean)
+      .forEach((part) => {
+        if (/^https?:\/\//i.test(part) || part.startsWith('/')) {
+          urls.add(part);
+        }
+      });
+  };
+  const pushUrl = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    if (!text) return;
+    pushUrlsFromText(text);
+  };
+
+  const visit = (value: unknown, depth = 0) => {
+    if (depth > 4 || value == null) return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('{') && trimmed.endsWith('}'))
+      ) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          visit(parsed, depth + 1);
+          return;
+        } catch {
+          // ignore parse failures
+        }
+      }
+      pushUrlsFromText(trimmed);
+      return;
+    }
+    if (typeof value === 'object') {
+      const row = value as Record<string, unknown>;
+      pushUrl(
+        row.image_path ??
+          row.image_url ??
+          row.url ??
+          row.path ??
+          row.secure_url ??
+          row.portfolio_image ??
+          row.portfolio_url ??
+          row.gallery_pic ??
+          row.gallery_image
+      );
+      Object.values(row).forEach((child) => visit(child, depth + 1));
+    }
+  };
+
+  candidates.forEach((candidate) => visit(candidate));
+  return Array.from(urls).slice(0, 5);
+};
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
@@ -137,7 +243,14 @@ export default function InfluencerDashboard() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [platformForm, setPlatformForm] = useState<Record<number, PlatformFormItem>>({});
+  const [galleryImages, setGalleryImages] = useState<GalleryImageItem[]>([]);
+  const [isGalleryDragActive, setIsGalleryDragActive] = useState(false);
+  const [isSavingGallery, setIsSavingGallery] = useState(false);
+  const [hasSavedGallery, setHasSavedGallery] = useState(false);
+  const [isGalleryDirty, setIsGalleryDirty] = useState(false);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const galleryImagesRef = useRef<GalleryImageItem[]>([]);
   const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
 
   // Edit form state
@@ -181,6 +294,280 @@ export default function InfluencerDashboard() {
     if (Number.isFinite(numeric) && numeric <= 0) return fallback;
     return str;
   };
+  const toPercentNumber = (value: unknown) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+    const numeric = Number(raw.replace(/,/g, '').replace('%', ''));
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(100, numeric));
+  };
+  const parseJsonSafely = (value: string) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+  const toArrayData = (value: unknown): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = parseJsonSafely(value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+    return [];
+  };
+  const toObjectData = (value: unknown): Record<string, any> | null => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+    if (typeof value === 'string') {
+      const parsed = parseJsonSafely(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>;
+      }
+    }
+    return null;
+  };
+  const pickGenderValue = (
+    source: Record<string, any>,
+    keys: string[],
+    fallback = ''
+  ) => {
+    for (const key of keys) {
+      if (!(key in source)) continue;
+      return toPositiveMetric(source[key], fallback);
+    }
+    return fallback;
+  };
+  const parseAudienceGender = (
+    raw: unknown,
+    current: SharedAnalyticsData['audienceGender']
+  ): SharedAnalyticsData['audienceGender'] => {
+    const next = { ...current };
+    const obj = toObjectData(raw);
+
+    if (obj) {
+      const normalized = Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [String(key).toLowerCase(), value])
+      ) as Record<string, any>;
+
+      next.female = pickGenderValue(
+        normalized,
+        ['female', 'females', 'women', 'woman', 'female_percentage', 'female_pct', 'f'],
+        next.female
+      );
+      next.male = pickGenderValue(
+        normalized,
+        ['male', 'males', 'men', 'man', 'male_percentage', 'male_pct', 'm'],
+        next.male
+      );
+      next.other = pickGenderValue(
+        normalized,
+        ['other', 'others', 'non_binary', 'non-binary', 'other_percentage', 'other_pct', 'o'],
+        next.other || ''
+      );
+    }
+
+    const asArray = toArrayData(raw);
+    if (asArray.length > 0) {
+      asArray.forEach((entry: any) => {
+        const row = toObjectData(entry);
+        if (!row) return;
+        const rowNormalized = Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [String(key).toLowerCase(), value])
+        ) as Record<string, any>;
+        next.female = pickGenderValue(
+          rowNormalized,
+          ['female', 'females', 'women', 'woman', 'female_percentage', 'female_pct', 'f'],
+          next.female
+        );
+        next.male = pickGenderValue(
+          rowNormalized,
+          ['male', 'males', 'men', 'man', 'male_percentage', 'male_pct', 'm'],
+          next.male
+        );
+        next.other = pickGenderValue(
+          rowNormalized,
+          ['other', 'others', 'non_binary', 'non-binary', 'other_percentage', 'other_pct', 'o'],
+          next.other || ''
+        );
+        const key = String(
+          row.gender ??
+            row.sex ??
+            row.name ??
+            row.label ??
+            row.type ??
+            row.segment ??
+            row.category ??
+            row.key ??
+            row.title ??
+            ''
+        ).trim().toLowerCase();
+        const value =
+          row.percentage ??
+          row.percent ??
+          row.pct ??
+          row.value ??
+          row.count ??
+          row.total ??
+          row.share ??
+          row.ratio;
+        if (!key) return;
+        if (key.includes('female') || key.includes('woman') || key.includes('women') || key === 'f') {
+          next.female = toPositiveMetric(value, next.female);
+        } else if (key.includes('male') || key.includes('man') || key.includes('men') || key === 'm') {
+          next.male = toPositiveMetric(value, next.male);
+        } else if (key.includes('other') || key.includes('non')) {
+          next.other = toPositiveMetric(value, next.other || '');
+        }
+      });
+    }
+
+    return next;
+  };
+  const mergeAudienceGenderFromProfile = (
+    profile: any,
+    current: SharedAnalyticsData['audienceGender']
+  ): SharedAnalyticsData['audienceGender'] => {
+    let next = { ...current };
+    const candidates: unknown[] = [
+      profile?.influencer_audience_genders,
+      profile?.influencer_audience_gender,
+      profile?.audience_genders,
+      profile?.audience_gender,
+      profile?.audienceGender,
+      profile?.gender,
+      profile?.genders,
+      profile?.sex,
+      profile?.demographics?.gender,
+      profile?.demographics?.genders,
+      profile?.audience_demographics?.gender,
+      profile?.audience_demographics?.genders,
+      profile?.influencer?.influencer_audience_genders,
+      profile?.influencer?.influencer_audience_gender,
+      profile?.influencer?.audience_genders,
+      profile?.influencer?.audience_gender,
+      profile?.influencer?.audienceGender,
+      profile?.influencer?.demographics?.gender,
+      profile?.influencer?.audience_demographics?.gender,
+    ];
+
+    const seen = new WeakSet<object>();
+    const walk = (value: unknown, depth = 0) => {
+      if (depth > 3 || value == null) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => walk(item, depth + 1));
+        return;
+      }
+      const obj = toObjectData(value);
+      if (!obj) return;
+      if (seen.has(obj)) return;
+      seen.add(obj);
+      Object.entries(obj).forEach(([key, val]) => {
+        const normalizedKey = String(key).toLowerCase();
+        if (
+          normalizedKey.includes('gender') ||
+          normalizedKey.includes('genders') ||
+          normalizedKey === 'sex'
+        ) {
+          candidates.push(val);
+        }
+        if (val && (Array.isArray(val) || typeof val === 'object')) {
+          walk(val, depth + 1);
+        }
+      });
+    };
+
+    walk(profile);
+
+    candidates
+      .filter((candidate) => candidate !== undefined && candidate !== null)
+      .forEach((candidate) => {
+        next = parseAudienceGender(candidate, next);
+      });
+
+    return next;
+  };
+  const hasGenderValues = (gender: SharedAnalyticsData['audienceGender']) => {
+    const female = Number(String(gender.female ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    const male = Number(String(gender.male ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    const other = Number(String(gender.other ?? '').replace(/,/g, '').replace('%', '')) || 0;
+    return female > 0 || male > 0 || other > 0;
+  };
+  const extractGenderFromProfile = (profile: any) =>
+    mergeAudienceGenderFromProfile(profile, DEFAULT_ANALYTICS_DATA.audienceGender);
+  const buildProfileIdentityCandidates = (profile: any): string[] => {
+    const user = toObjectData(profile?.user);
+    const influencer = toObjectData(profile?.influencer);
+    const cachedUser = (() => {
+      try {
+        const raw = localStorage.getItem('influencer_user');
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    })();
+
+    const candidates = [
+      profile?.slug,
+      profile?.username,
+      String(profile?.username ?? '').replace(/^@/, ''),
+      profile?.handle,
+      profile?.name,
+      toSlug(profile?.name),
+      profile?.id,
+      profile?.user_id,
+      profile?.influencer_id,
+      user?.slug,
+      user?.username,
+      String(user?.username ?? '').replace(/^@/, ''),
+      user?.name,
+      toSlug(String(user?.name ?? '')),
+      user?.id,
+      influencer?.slug,
+      influencer?.username,
+      String(influencer?.username ?? '').replace(/^@/, ''),
+      influencer?.name,
+      toSlug(String(influencer?.name ?? '')),
+      influencer?.id,
+      cachedUser?.slug,
+      cachedUser?.username,
+      String(cachedUser?.username ?? '').replace(/^@/, ''),
+      cachedUser?.name,
+      toSlug(cachedUser?.name),
+      cachedUser?.id,
+      cachedUser?.user_id,
+      cachedUser?.influencer_id,
+      String(cachedUser?.email ?? '').split('@')[0],
+    ]
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(candidates));
+  };
+  const fetchPublicProfileFallback = async (profile: any) => {
+    const candidates = buildProfileIdentityCandidates(profile);
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/influencers/public-profile/${encodeURIComponent(candidate)}`,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+        const result = await response.json();
+        if (!(result?.success || response.ok) || !result?.data) continue;
+        const payload =
+          (result.data?.influencer && typeof result.data.influencer === 'object'
+            ? result.data.influencer
+            : result.data) || {};
+        if (payload && typeof payload === 'object') return payload;
+      } catch {
+        // try next candidate
+      }
+    }
+    return null;
+  };
 
   const syncAnalyticsFromProfile = (profile: any) => {
     if (!profile || typeof profile !== 'object') return;
@@ -203,7 +590,10 @@ export default function InfluencerDashboard() {
         3: 'tiktok',
         4: 'others',
       };
-      const socialAccounts = Array.isArray(profile?.social_accounts) ? profile.social_accounts : [];
+      const socialAccounts =
+        toArrayData(profile?.social_accounts).length > 0
+          ? toArrayData(profile?.social_accounts)
+          : toArrayData(profile?.influencer_social_accounts);
       socialAccounts.forEach((account: any) => {
         const key = platformMap[Number(account?.platform_id)];
         if (!key) return;
@@ -217,30 +607,51 @@ export default function InfluencerDashboard() {
         };
       });
 
-      const audienceLocations = profile?.audience_locations || profile?.audienceLocation;
-      if (Array.isArray(audienceLocations) && audienceLocations.length > 0) {
-        next.audienceLocation = audienceLocations.map((item: any) => ({
+      const audienceLocations =
+        profile?.influencer_audience_locations ??
+        profile?.audience_locations ??
+        profile?.audienceLocation;
+      const audienceLocationArray = toArrayData(audienceLocations);
+      if (audienceLocationArray.length > 0) {
+        next.audienceLocation = audienceLocationArray.map((item: any) => ({
           country: String(item?.country ?? '').trim(),
           percentage: toPositiveMetric(item?.percentage, ''),
         })).filter((item: any) => item.country);
+      } else {
+        const locationObject = toObjectData(audienceLocations);
+        if (locationObject) {
+          next.audienceLocation = Object.entries(locationObject)
+            .map(([country, percentage]) => ({
+              country: String(country).trim(),
+              percentage: toPositiveMetric(percentage, ''),
+            }))
+            .filter((item: any) => item.country);
+        }
       }
 
-      const audienceAge = profile?.audience_age || profile?.audienceAge;
-      if (Array.isArray(audienceAge) && audienceAge.length > 0) {
-        next.audienceAge = audienceAge.map((item: any) => ({
+      const audienceAge =
+        profile?.influencer_audience_ages ??
+        profile?.audience_age ??
+        profile?.audienceAge;
+      const audienceAgeArray = toArrayData(audienceAge);
+      if (audienceAgeArray.length > 0) {
+        next.audienceAge = audienceAgeArray.map((item: any) => ({
           range: String(item?.age_range ?? item?.range ?? '').trim(),
           percentage: toPositiveMetric(item?.percentage, ''),
         })).filter((item: any) => item.range);
+      } else {
+        const ageObject = toObjectData(audienceAge);
+        if (ageObject) {
+          next.audienceAge = Object.entries(ageObject)
+            .map(([range, percentage]) => ({
+              range: String(range).trim(),
+              percentage: toPositiveMetric(percentage, ''),
+            }))
+            .filter((item: any) => item.range);
+        }
       }
 
-      const audienceGender = profile?.audience_gender || profile?.audienceGender;
-      if (audienceGender && typeof audienceGender === 'object') {
-        next.audienceGender = {
-          female: toPositiveMetric((audienceGender as any)?.female, next.audienceGender.female),
-          male: toPositiveMetric((audienceGender as any)?.male, next.audienceGender.male),
-          other: toPositiveMetric((audienceGender as any)?.other, next.audienceGender.other || ''),
-        };
-      }
+      next.audienceGender = mergeAudienceGenderFromProfile(profile, next.audienceGender);
 
       localStorage.setItem(analyticsStorageKey, JSON.stringify(next));
       window.dispatchEvent(new Event('influencer-analytics-updated'));
@@ -358,6 +769,22 @@ export default function InfluencerDashboard() {
         .map((cat: any) => cat.id || cat.category_id)
         .filter(Boolean)
     );
+    const galleryUrls = extractGalleryImageUrls(data);
+    if (galleryUrls.length > 0) {
+      const normalized = galleryUrls.map((url, index) => ({
+        id: `api-${index}-${url.slice(-16)}`,
+        preview: url,
+        name: `gallery-${index + 1}`,
+      }));
+      setGalleryImages(normalized);
+      setHasSavedGallery(true);
+      setIsGalleryDirty(false);
+      try {
+        saveGalleryToLocalCache(normalized, data);
+      } catch {
+        // ignore local cache errors
+      }
+    }
     syncAnalyticsFromProfile(data);
   };
 
@@ -382,6 +809,215 @@ export default function InfluencerDashboard() {
     applyProfileData(userData);
     setIsEditing(false);
   };
+
+  const getGalleryStorageKeys = (profile?: any) => {
+    const source = profile || userData || {};
+    const candidates = [
+      source?.id,
+      source?.user_id,
+      source?.influencer_id,
+      source?.email,
+      source?.slug,
+      source?.username,
+      source?.handle,
+      source?.name ? toSlug(String(source.name)) : '',
+    ]
+      .map((value) => String(value ?? '').replace(/^@/, '').trim().toLowerCase())
+      .filter(Boolean);
+
+    const uniqueCandidates = Array.from(new Set(candidates));
+    if (uniqueCandidates.length === 0) uniqueCandidates.push('anonymous');
+    return uniqueCandidates.map((scope) => `influencer_gallery_images:${scope}`);
+  };
+
+  const saveGalleryToLocalCache = (images: GalleryImageItem[], profile?: any) => {
+    const payload = JSON.stringify(images);
+    getGalleryStorageKeys(profile).forEach((key) => {
+      localStorage.setItem(key, payload);
+    });
+  };
+
+  const loadGalleryFromLocalCache = (profile?: any): GalleryImageItem[] => {
+    const keys = getGalleryStorageKeys(profile);
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) continue;
+        const loaded = parsed
+          .filter((item) => item && typeof item === 'object' && typeof item.preview === 'string')
+          .slice(0, 5)
+          .map((item: any, index: number) => ({
+            id: String(item.id || `saved-${index}`),
+            preview: String(item.preview),
+            name: String(item.name || ''),
+          }));
+        if (loaded.length > 0) return loaded;
+      } catch {
+        // ignore invalid cache values
+      }
+    }
+    return [];
+  };
+
+  const appendGalleryFiles = (files: File[]) => {
+    if (!files.length) return;
+
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      toast.error('Please upload image files only');
+      return;
+    }
+
+    setGalleryImages((prev) => {
+      const remainingSlots = Math.max(0, 5 - prev.length);
+      if (remainingSlots <= 0) {
+        toast.error('Maximum 5 images allowed');
+        return prev;
+      }
+
+      const accepted = imageFiles.slice(0, remainingSlots);
+      const nextItems = accepted.map((file, index) => ({
+        id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+      }));
+
+      if (imageFiles.length > remainingSlots) {
+        toast.error('Only 5 images are allowed');
+      }
+
+      return [...prev, ...nextItems];
+    });
+    setIsGalleryDirty(true);
+  };
+
+  const handleGalleryFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    appendGalleryFiles(files);
+    e.target.value = '';
+  };
+
+  const handleGalleryDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsGalleryDragActive(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    appendGalleryFiles(files);
+  };
+
+  const removeGalleryImage = (id: string) => {
+    setGalleryImages((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target && target.preview.startsWith('blob:')) URL.revokeObjectURL(target.preview);
+      return prev.filter((item) => item.id !== id);
+    });
+    setIsGalleryDirty(true);
+  };
+
+  const handleSaveGallery = async () => {
+    if (galleryImages.length === 0) {
+      toast.error('Please add at least one image before saving');
+      return;
+    }
+
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    setIsSavingGallery(true);
+    try {
+      const filesToUpload = galleryImages
+        .filter((item) => item.file instanceof File)
+        .map((item) => item.file as File);
+
+      if (filesToUpload.length === 0) {
+        toast.error('Please choose at least one new image to upload');
+        setIsSavingGallery(false);
+        return;
+      }
+
+      const formData = new FormData();
+      filesToUpload.forEach((file) => {
+        formData.append('gallery_pic', file);
+      });
+
+      const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const result = await response.json();
+      if (!(result?.success || response.ok)) {
+        toast.error(result?.message || 'Failed to upload gallery images');
+        return;
+      }
+
+      const apiUrls = extractGalleryImageUrls(result);
+      const retainedUrls = galleryImages
+        .filter((item) => !item.file && item.preview)
+        .map((item) => item.preview);
+      const mergedUrls = Array.from(new Set([...retainedUrls, ...apiUrls])).slice(0, 5);
+      const normalized = mergedUrls.map((url, index) => ({
+        id: `api-${index}-${url.slice(-16)}`,
+        preview: url,
+        name: `gallery-${index + 1}`,
+      }));
+
+      galleryImages.forEach((item) => {
+        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+      });
+
+      setGalleryImages(normalized);
+      setHasSavedGallery(true);
+      setIsGalleryDirty(false);
+
+      saveGalleryToLocalCache(normalized);
+      window.dispatchEvent(new Event('influencer-profile-updated'));
+      toast.success(hasSavedGallery ? 'Gallery images updated' : 'Gallery images saved');
+    } catch {
+      toast.error('Failed to save gallery images');
+    } finally {
+      setIsSavingGallery(false);
+    }
+  };
+
+  useEffect(() => {
+    galleryImagesRef.current = galleryImages;
+  }, [galleryImages]);
+
+  useEffect(() => {
+    if (!userData) return;
+    try {
+      const loaded = loadGalleryFromLocalCache(userData);
+      if (loaded.length === 0) {
+        setGalleryImages([]);
+        setHasSavedGallery(false);
+        setIsGalleryDirty(false);
+        return;
+      }
+      setGalleryImages(loaded);
+      setHasSavedGallery(loaded.length > 0);
+      setIsGalleryDirty(false);
+    } catch {
+      setGalleryImages([]);
+      setHasSavedGallery(false);
+      setIsGalleryDirty(false);
+    }
+  }, [userData]);
+
+  useEffect(() => {
+    return () => {
+      galleryImagesRef.current.forEach((item) => {
+        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+      });
+    };
+  }, []);
 
   // Fetch profile
   useEffect(() => {
@@ -420,9 +1056,23 @@ export default function InfluencerDashboard() {
         const result = await response.json();
         if (result.success && result.data) {
           applyProfileData(result.data);
+          const baseGender = extractGenderFromProfile(result.data);
+          if (!hasGenderValues(baseGender)) {
+            const publicProfile = await fetchPublicProfileFallback(result.data);
+            if (publicProfile) {
+              syncAnalyticsFromProfile(publicProfile);
+            }
+          }
           localStorage.setItem('influencer_user', JSON.stringify(result.data));
         } else if (parsedCachedUser) {
           applyProfileData(parsedCachedUser);
+          const cachedGender = extractGenderFromProfile(parsedCachedUser);
+          if (!hasGenderValues(cachedGender)) {
+            const publicProfile = await fetchPublicProfileFallback(parsedCachedUser);
+            if (publicProfile) {
+              syncAnalyticsFromProfile(publicProfile);
+            }
+          }
           toast.error('Live profile load failed. Showing cached profile.');
         } else {
           toast.error(result?.message || 'Unable to load dashboard profile');
@@ -718,9 +1368,9 @@ export default function InfluencerDashboard() {
   const filteredCountries = COUNTRIES.filter(c =>
     c.toLowerCase().includes(countrySearch.toLowerCase())
   );
-  const femalePct = Number(analyticsData.audienceGender.female) || 0;
-  const malePct = Number(analyticsData.audienceGender.male) || 0;
-  const otherPct = Number(analyticsData.audienceGender.other) || 0;
+  const femalePct = toPercentNumber(analyticsData.audienceGender.female);
+  const malePct = toPercentNumber(analyticsData.audienceGender.male);
+  const otherPct = toPercentNumber(analyticsData.audienceGender.other);
   const totalGenderPct = femalePct + malePct + otherPct;
   const joinedDateLabel = getJoinedDateLabel(userData);
   const overviewLocations = analyticsData.audienceLocation
@@ -1511,6 +2161,86 @@ export default function InfluencerDashboard() {
 
                 {/* Right Sidebar */}
                 <div className="space-y-4">
+                  {/* Gallery Images */}
+                  <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                    <div className="mb-3">
+                      <h3 className="font-bold text-white">Gallery Images</h3>
+                      <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
+                    </div>
+
+                    {galleryImages.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        {galleryImages.map((image) => (
+                          <div key={image.id} className="relative rounded-lg overflow-hidden border border-gray-700">
+                            <img src={image.preview} alt={image.name || image.file?.name || 'Gallery image'} className="w-full h-20 object-cover" />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeGalleryImage(image.id);
+                              }}
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black"
+                              aria-label="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsGalleryDragActive(true);
+                      }}
+                      onDragLeave={() => setIsGalleryDragActive(false)}
+                      onDrop={handleGalleryDrop}
+                      className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors cursor-pointer mt-3 ${
+                        isGalleryDragActive
+                          ? 'border-primary bg-primary/10'
+                          : 'border-gray-700 hover:border-gray-500 bg-gray-800/50'
+                      }`}
+                    >
+                      <p className="text-sm text-gray-300">Drag & drop images here</p>
+                      <p className="text-xs text-gray-500 mt-1">or choose multiple images at once</p>
+                      <p className="text-xs text-gray-500 mt-2">{galleryImages.length}/5 uploaded</p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          galleryInputRef.current?.click();
+                        }}
+                        className="mt-3 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-600"
+                      >
+                        Choose Images
+                      </button>
+                      <input
+                        ref={galleryInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleGalleryFileChange}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveGallery}
+                      disabled={isSavingGallery || galleryImages.length === 0 || !isGalleryDirty}
+                      className={`mt-3 w-full py-2 text-sm font-semibold rounded-lg transition-colors ${
+                        isSavingGallery || galleryImages.length === 0 || !isGalleryDirty
+                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-primary hover:bg-secondary text-black'
+                      }`}
+                    >
+                      {isSavingGallery
+                        ? (hasSavedGallery ? 'Updating Images...' : 'Saving Images...')
+                        : (hasSavedGallery ? 'Update Images' : 'Save Images')}
+                    </button>
+                  </div>
+
                   {/* Audience Insights */}
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <h3 className="font-bold text-white mb-4">Audience Insights</h3>
