@@ -634,6 +634,56 @@ function extractGalleryFromApi(row: Record<string, unknown>): string[] {
   return Array.from(urls).slice(0, 10);
 }
 
+function hasProfileImage(image: unknown): boolean {
+  const value = String(image ?? '').trim().toLowerCase();
+  return Boolean(value && value !== 'null' && value !== 'undefined');
+}
+
+const DEFAULT_PROFILE_PLACEHOLDER_MARKERS = [
+  'photo-1494790108377-be9c29b29330',
+];
+
+function sanitizeProfileImage(image: unknown): string {
+  const value = String(image ?? '').trim();
+  if (!hasProfileImage(value)) return '';
+  const normalized = value.toLowerCase();
+  if (DEFAULT_PROFILE_PLACEHOLDER_MARKERS.some((marker) => normalized.includes(marker))) {
+    return '';
+  }
+  return value;
+}
+
+function getNameInitial(name: unknown): string {
+  const value = String(name ?? '').trim();
+  return value ? value.charAt(0).toUpperCase() : 'U';
+}
+
+function ProfileAvatar({
+  name,
+  image,
+  className,
+  initialClassName,
+}: {
+  name: string;
+  image?: string;
+  className: string;
+  initialClassName: string;
+}) {
+  if (hasProfileImage(image)) {
+    return <img src={image} alt={name} className={className} />;
+  }
+
+  return (
+    <div
+      className={`${className} bg-gradient-to-br from-pink-500 to-purple-600 text-white flex items-center justify-center`}
+      aria-label={name}
+      role="img"
+    >
+      <span className={initialClassName}>{getNameInitial(name)}</span>
+    </div>
+  );
+}
+
 function mapPublicProfileToInfluencer(
   row: Record<string, unknown>,
   fallback?: Influencer,
@@ -655,13 +705,12 @@ function mapPublicProfileToInfluencer(
   ).replace(/^@/, '').trim();
   const usernameRaw = String(row.username || row.handle || slug || fallback?.username || name.toLowerCase().replace(/\s+/g, ''));
   const username = usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
-  const profileImage = String(
+  const profileImage = sanitizeProfileImage(
     row.profile_pic ||
       row.profile_image ||
-      fallback?.profileImage ||
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
+      ''
   );
-  const coverImage = String(row.cover_image || fallback?.coverImage || profileImage);
+  const coverImage = String(row.cover_image || fallback?.coverImage || profileImage || '').trim();
   const city = String(row.city_name || row.city || '').trim();
   const country = String(row.country_name || row.country || '').trim();
   const location = [city, country].filter(Boolean).join(', ') || fallback?.location || 'Not specified';
@@ -760,7 +809,9 @@ function ensureProfileInfluencer(influencer: Influencer | null | undefined): Pro
   const gallery = Array.isArray((influencer as any).gallery)
     ? (influencer as any).gallery.filter(Boolean)
     : [];
-  return { ...influencer, gallery };
+  const profileImage = sanitizeProfileImage((influencer as any).profileImage);
+  const coverImage = String((influencer as any).coverImage || profileImage || '').trim();
+  return { ...influencer, profileImage, coverImage, gallery };
 }
 
 function getPrimaryPlatformId(platforms: Influencer['platforms']): number | null {
@@ -782,7 +833,7 @@ export function InfluencerProfile() {
   const [showAllGalleryModal, setShowAllGalleryModal] = useState(false);
   const stateInfluencer = ((locationState.state as { influencer?: ProfileInfluencer } | null)?.influencer) || null;
   const stateRawProfile = asRecord(stateInfluencer?.rawApiData);
-  const [influencer, setInfluencer] = useState<ProfileInfluencer | null>(stateInfluencer);
+  const [influencer, setInfluencer] = useState<ProfileInfluencer | null>(() => ensureProfileInfluencer(stateInfluencer));
   const [analyticsData, setAnalyticsData] = useState<ProfileAnalyticsData>(createDefaultAnalytics());
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [relatedInfluencers, setRelatedInfluencers] = useState<ProfileInfluencer[]>([]);
@@ -1140,7 +1191,7 @@ export function InfluencerProfile() {
   const portfolioImages = (
     galleryImages.length > 0
       ? galleryImages
-      : (!isLoadingProfile ? [influencer.profileImage] : [])
+      : (!isLoadingProfile && hasProfileImage(influencer.profileImage) ? [influencer.profileImage] : [])
   ).slice(0, 10);
   const audienceLocationData = analyticsData.audienceLocation;
   const audienceAgeData = analyticsData.audienceAge;
@@ -1393,10 +1444,11 @@ export function InfluencerProfile() {
 
             {/* Profile Info Section */}
             <div className="flex items-start gap-3 md:gap-4">
-              <img
-                src={influencer.profileImage}
-                alt={influencer.name}
+              <ProfileAvatar
+                name={influencer.name}
+                image={influencer.profileImage}
                 className="w-14 h-14 md:w-16 md:h-16 rounded-full object-cover flex-shrink-0"
+                initialClassName="font-bold text-lg md:text-xl"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -1815,10 +1867,11 @@ export function InfluencerProfile() {
                           onClick={() => navigate(`/influencer/${inf.slug || inf.id}`)}
                         >
                           <div className="aspect-[3/4] rounded-lg overflow-hidden mb-3">
-                            <img
-                              src={inf.profileImage}
-                              alt={inf.name}
+                            <ProfileAvatar
+                              name={inf.name}
+                              image={inf.profileImage}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              initialClassName="font-bold text-5xl"
                             />
                           </div>
                           <div className="flex items-center gap-2 mb-1">

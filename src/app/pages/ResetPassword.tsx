@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle, Sparkles, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,10 +15,13 @@ export function ResetPassword() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
   const [searchParams] = useSearchParams();
+  const { token: pathToken } = useParams();
   const navigate = useNavigate();
   
-  // Get token and user type from URL
-  const token = searchParams.get('token');
+  // Support both URL styles:
+  // 1) /reset-password/:token
+  // 2) /reset-password?token=...
+  const token = pathToken || searchParams.get('token');
   const userType = searchParams.get('type') || 'brand';
   const isBrand = userType === 'brand';
 

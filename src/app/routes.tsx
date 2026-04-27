@@ -43,6 +43,7 @@ export const router = createBrowserRouter([
       { path: 'brand/login', element: <BrandLogin /> },
       { path: 'forgot-password', element: <ForgotPassword /> },
       { path: 'reset-password', element: <ResetPassword /> },
+      { path: 'reset-password/:token', element: <ResetPassword /> },
     ],
   },
 
