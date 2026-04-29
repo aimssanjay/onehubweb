@@ -12,6 +12,7 @@ import {
   Award,
   Zap,
   Camera,
+  Images,
   ChevronRight,
   Plus,
   ShoppingCart,
@@ -25,6 +26,7 @@ import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { categories as mockCategories, type Influencer } from '../../data/mockData';
 import { API_BASE_URL } from '../../services/api';
+import { useCategories } from '../hooks/useCategories';
 
 type ProfileInfluencer = Influencer & {
   gallery: string[];
@@ -782,6 +784,7 @@ function mapPublicProfileToInfluencer(
     gallery,
     rating: parseNumber(row.rating, fallback?.rating || 4.5),
     totalOrders: parseNumber(row.total_orders, fallback?.totalOrders || 0),
+    rawApiData: row,
     engagement: String(
       row.engagement_rate ??
         row.engagement ??
@@ -826,11 +829,13 @@ function getPrimaryPlatformId(platforms: Influencer['platforms']): number | null
 export function InfluencerProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { categories: apiCategories } = useCategories();
   const locationState = useLocation();
   const [selectedPackage, setSelectedPackage] = useState('package-1');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showAllGalleryModal, setShowAllGalleryModal] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const stateInfluencer = ((locationState.state as { influencer?: ProfileInfluencer } | null)?.influencer) || null;
   const stateRawProfile = asRecord(stateInfluencer?.rawApiData);
   const [influencer, setInfluencer] = useState<ProfileInfluencer | null>(() => ensureProfileInfluencer(stateInfluencer));
@@ -884,27 +889,19 @@ export function InfluencerProfile() {
   }, []);
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/categories/get-all-categories`, {
-          method: 'GET',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!response.ok) return;
-        const payload = await response.json();
-        const lookup = extractCategoryLookupFromApiPayload(payload);
-        if (Object.keys(lookup).length > 0) {
-          setCategoryLookup(lookup);
-        }
-      } catch {
-        // Keep fallback to static categories.
+    if (!Array.isArray(apiCategories) || apiCategories.length === 0) return;
+    const lookup = apiCategories.reduce<Record<string, string>>((acc, category) => {
+      const id = String(category?.id ?? '').trim();
+      const name = String(category?.name ?? '').trim();
+      if (id && name) {
+        acc[id] = name;
       }
-    };
-    fetchCategories();
-  }, []);
+      return acc;
+    }, {});
+    if (Object.keys(lookup).length > 0) {
+      setCategoryLookup(lookup);
+    }
+  }, [apiCategories]);
 
   useEffect(() => {
     const fetchPublicProfile = async () => {
@@ -1188,6 +1185,8 @@ export function InfluencerProfile() {
   const galleryImages = Array.isArray(influencer.gallery)
     ? Array.from(new Set(influencer.gallery.filter(Boolean)))
     : [];
+  const desktopGalleryImages = galleryImages.slice(0, 4);
+  const desktopPlaceholderCount = Math.max(0, 4 - desktopGalleryImages.length);
   const portfolioImages = (
     galleryImages.length > 0
       ? galleryImages
@@ -1210,30 +1209,30 @@ export function InfluencerProfile() {
   const donutRadius = 40;
   const donutCircumference = 2 * Math.PI * donutRadius;
 
-  const reviews = [
+  const faqs = [
     {
-      name: 'Andrea',
-      initial: 'A',
-      package: '1 UGC Product Video (20 Seconds)',
-      rating: 5,
-      date: 'July 2025',
-      text: 'Thanks for such a cute video. : )',
+      question: 'What kind of content can this influencer create?',
+      answer: 'This influencer can create Instagram posts, reels, stories, and UGC videos depending on the selected package and campaign requirements.',
     },
     {
-      name: 'Aliénor',
-      initial: 'A',
-      package: '2 Instagram Photo Feed Posts',
-      rating: 5,
-      date: 'September 2023',
-      text: 'Aliénor left a 5.0 star review.',
+      question: 'How quickly can the influencer deliver content?',
+      answer: 'Typical delivery is within 3 to 7 business days after the brief is approved, based on package scope and revision needs.',
     },
     {
-      name: 'John-ritchy',
-      initial: 'J',
-      package: '3 UGC Product Videos (20 Seconds) & 3 UGC Product Photos',
-      rating: 5,
-      date: 'February 2023',
-      text: 'High-Quality Content. Thank you so much!!!',
+      question: 'Can brands request edits after delivery?',
+      answer: 'Yes, most collaborations include at least one revision round to align with brand tone, messaging, and campaign goals.',
+    },
+    {
+      question: 'Does the influencer support custom campaign packages?',
+      answer: 'Yes, brands can negotiate custom packages for specific deliverables, timelines, usage rights, and budget constraints.',
+    },
+    {
+      question: 'Which audience does this influencer primarily reach?',
+      answer: 'Audience details such as location, age groups, and gender split are available in the analytics section of this page.',
+    },
+    {
+      question: 'How can a brand start a collaboration?',
+      answer: 'Select a package and click Book Now or Invite to Campaign to send requirements and begin the collaboration process.',
     },
   ];
 
@@ -1299,21 +1298,13 @@ export function InfluencerProfile() {
                 <Share2 className="w-4 h-4" />
                 Share
               </Button>
-              <Button variant="outline" size="sm" className="gap-2 border-gray-300 text-gray-700">
-                <Heart className="w-4 h-4" />
-                Save
-              </Button>
-              <Button size="sm" className="gap-2 bg-pink-500 hover:bg-pink-600 text-white">
-                <Plus className="w-4 h-4" />
-                Invite to Campaign
-              </Button>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 gap-6 lg:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6 md:space-y-8">
+          <div className="space-y-6 md:space-y-8">
             {/* Image Carousel - Mobile */}
             {isMobile ? (
               <div className="relative -mx-4">
@@ -1376,34 +1367,53 @@ export function InfluencerProfile() {
               </div>
             ) : (
               /* Desktop Image Gallery */
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 {portfolioImages.length === 0 ? (
                   <>
-                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
-                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
-                    <div className="aspect-[3/4] rounded-lg bg-gray-100 animate-pulse" />
+                    <div className="aspect-[3/4] rounded-md bg-[#f1f1f1] flex items-center justify-center">
+                      <Images className="w-20 h-20 text-[#d6d6d6]" strokeWidth={1.5} />
+                    </div>
+                    <div className="aspect-[3/4] rounded-md bg-[#f1f1f1] flex items-center justify-center">
+                      <Images className="w-20 h-20 text-[#d6d6d6]" strokeWidth={1.5} />
+                    </div>
+                    <div className="aspect-[3/4] rounded-md bg-[#f1f1f1] flex items-center justify-center">
+                      <Images className="w-20 h-20 text-[#d6d6d6]" strokeWidth={1.5} />
+                    </div>
+                    <div className="aspect-[3/4] rounded-md bg-[#f1f1f1] flex items-center justify-center">
+                      <Images className="w-20 h-20 text-[#d6d6d6]" strokeWidth={1.5} />
+                    </div>
                   </>
                 ) : (
-                  portfolioImages.slice(0, 3).map((image, index) => (
-                    <div key={index} className="aspect-[3/4] rounded-lg overflow-hidden relative">
-                      <img
-                        src={image}
-                        alt={influencer.name}
-                        className="w-full h-full object-cover"
-                      />
-                      {index === 2 && portfolioImages.length > 3 && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setShowAllGalleryModal(true)}
-                          className="absolute bottom-4 right-4 bg-white hover:bg-gray-100 text-gray-900 shadow-lg text-xs"
-                        >
-                          <Camera className="w-3 h-3 mr-1" />
-                          Show All
-                        </Button>
-                      )}
-                    </div>
-                  ))
+                  <>
+                    {desktopGalleryImages.map((image, index) => (
+                      <div key={index} className="aspect-[3/4] rounded-lg overflow-hidden relative">
+                        <img
+                          src={image}
+                          alt={influencer.name}
+                          className="w-full h-full object-cover"
+                        />
+                        {index === 3 && portfolioImages.length > 4 && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setShowAllGalleryModal(true)}
+                            className="absolute bottom-4 right-4 bg-white hover:bg-gray-100 text-gray-900 shadow-lg text-xs"
+                          >
+                            <Camera className="w-3 h-3 mr-1" />
+                            Show All
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    {Array.from({ length: desktopPlaceholderCount }).map((_, index) => (
+                      <div
+                        key={`placeholder-${index}`}
+                        className="aspect-[3/4] rounded-md bg-[#f1f1f1] flex items-center justify-center"
+                      >
+                        <Images className="w-20 h-20 text-[#d6d6d6]" strokeWidth={1.5} />
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             )}
@@ -1458,8 +1468,8 @@ export function InfluencerProfile() {
                     <span className="font-semibold text-gray-900 text-sm">5.0</span>
                   </div>
                   <span className="text-gray-500 text-sm">·</span>
-                  <a href="#reviews" className="text-gray-700 underline hover:text-gray-900 text-sm">
-                    7 Reviews
+                  <a href="#faqs" className="text-gray-700 underline hover:text-gray-900 text-sm">
+                    FAQs
                   </a>
                 </div>
                 <p className="text-sm text-gray-600 mb-3 flex items-center gap-1">
@@ -1757,74 +1767,37 @@ export function InfluencerProfile() {
 
             <Separator className="bg-gray-200" />
 
-            {/* Reviews Section */}
-            <div id="reviews">
+            {/* FAQ Section */}
+            <div id="faqs">
               <div className="flex flex-wrap items-center gap-2 mb-4 md:mb-6">
-                <h2 className="text-xl md:text-2xl font-bold text-gray-900">7 Reviews</h2>
-                <span className="text-gray-500">·</span>
-                <Star className="w-4 h-4 md:w-5 md:h-5 fill-yellow-400 text-yellow-400" />
-                <span className="text-lg md:text-xl font-bold text-gray-900">5.0</span>
+                <h2 className="text-[20px] font-bold text-gray-900">FAQ</h2>
               </div>
-
-              {/* Rating Categories - Hidden on mobile */}
-              {!isMobile && (
-                <div className="grid grid-cols-3 gap-6 mb-8">
-                  <div className="flex items-center gap-3">
-                    <MessageCircle className="w-8 h-8 text-gray-400" />
-                    <div>
-                      <div className="text-xs text-gray-600">Communication</div>
-                      <div className="font-semibold text-gray-900">5.0</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <MessageCircle className="w-8 h-8 text-gray-400" />
-                    <div>
-                      <div className="text-xs text-gray-600">Timeliness</div>
-                      <div className="font-semibold text-gray-900">5.0</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <MessageCircle className="w-8 h-8 text-gray-400" />
-                    <div>
-                      <div className="text-xs text-gray-600">Satisfaction</div>
-                      <div className="font-semibold text-gray-900">5.0</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Individual Reviews */}
-              <div className="space-y-4 md:space-y-6">
-                {reviews.map((review, index) => (
-                  <div key={index} className="border-b border-gray-200 pb-4 md:pb-6 last:border-0">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center flex-shrink-0">
-                        <span className="font-semibold text-gray-900 text-sm">{review.initial}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 mb-1 text-sm md:text-base">{review.name}</div>
-                        <div className="text-xs text-gray-600 mb-2 line-clamp-1">{review.package}</div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="flex items-center gap-0.5">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`w-3 h-3 ${
-                                  i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-xs text-gray-500">· {review.date}</span>
-                        </div>
-                        <p className="text-sm text-gray-700">{review.text}</p>
-                      </div>
-                    </div>
+              <div className="border-b border-gray-200">
+                {faqs.map((faq, index) => (
+                  <div key={index} className="border-t border-gray-200">
+                    <button
+                      type="button"
+                      className="w-full py-5 md:py-6 flex items-center justify-between gap-4 text-left"
+                      onClick={() =>
+                        setOpenFaqIndex((prev) => (prev === index ? null : index))
+                      }
+                    >
+                      <span className="text-[20px] font-semibold leading-tight text-gray-900">
+                        {faq.question}
+                      </span>
+                      <span className="text-3xl md:text-4xl font-light text-gray-700 leading-none">
+                        {openFaqIndex === index ? '−' : '+'}
+                      </span>
+                    </button>
+                    {openFaqIndex === index && (
+                      <p className="pb-5 md:pb-6 pr-8 text-sm md:text-base text-gray-700 leading-relaxed">
+                        {faq.answer}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-
             {/* Similar Influencers - Hidden on mobile */}
             {!isMobile && (
               <>
@@ -1863,10 +1836,10 @@ export function InfluencerProfile() {
                       {relatedInfluencers.map((inf) => (
                         <div 
                           key={inf.id} 
-                          className="cursor-pointer group shrink-0 w-[300px] snap-start"
+                          className="cursor-pointer group shrink-0 w-[300px] snap-start rounded-2xl border border-gray-200 bg-white overflow-hidden"
                           onClick={() => navigate(`/influencer/${inf.slug || inf.id}`)}
                         >
-                          <div className="aspect-[3/4] rounded-lg overflow-hidden mb-3">
+                          <div className="aspect-[3/4] overflow-hidden">
                             <ProfileAvatar
                               name={inf.name}
                               image={inf.profileImage}
@@ -1874,26 +1847,64 @@ export function InfluencerProfile() {
                               initialClassName="font-bold text-5xl"
                             />
                           </div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="secondary" className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200">
-                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
-                              Rating {Number.isFinite(Number(inf.rating)) ? Number(inf.rating).toFixed(1) : 'N/A'}
-                            </Badge>
-                            <span className="text-xs text-gray-700 font-medium">
+
+                          <div className="p-5">
+                            <div className="flex items-center gap-2 mb-3">
+                              <p className="text-[14px] leading-tight font-semibold text-gray-900">{inf.name}</p>
+                              <span className="inline-flex items-center gap-1 text-[14px] font-semibold text-gray-900">
+                                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                                {Number.isFinite(Number(inf.rating)) ? Number(inf.rating).toFixed(1) : 'N/A'}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mb-3">
                               {(() => {
                                 const categories = Array.isArray(inf.categories) ? inf.categories : [];
-                                const firstMeaningfulCategory = categories.find(
-                                  (item) => String(item || '').trim().toLowerCase() !== 'general'
-                                );
-                                const directCategory = String(inf.category || '').trim();
-                                if (firstMeaningfulCategory) return firstMeaningfulCategory;
-                                if (directCategory && directCategory.toLowerCase() !== 'general') return directCategory;
-                                return 'Influencer';
+                                const rawFromCard = asRecord((inf as Record<string, unknown>).rawApiData);
+                                const rawDerivedCategories = rawFromCard
+                                  ? extractCategoryNamesFromProfileRow(rawFromCard, undefined, categoryLookup)
+                                  : [];
+                                const mergedCategorySource = [
+                                  ...categories,
+                                  ...rawDerivedCategories,
+                                  String(inf.category || '').trim(),
+                                ];
+                                const categoryList = mergedCategorySource
+                                  .map((item) => String(item || '').trim())
+                                  .filter((item) => item && item.toLowerCase() !== 'general')
+                                  .filter((item, index, arr) => arr.indexOf(item) === index)
+                                  .slice(0, 2);
+                                const finalList = categoryList.length > 0
+                                  ? categoryList
+                                  : [];
+
+                                return finalList.map((cat) => (
+                                  <Badge
+                                    key={`${inf.id}-${cat}`}
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs border-gray-300 text-gray-700 font-medium"
+                                  >
+                                    {cat}
+                                  </Badge>
+                                ));
                               })()}
-                            </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-2xl border border-gray-300 px-3 py-2.5">
+                                <div className="text-xs text-gray-600 leading-none mb-1.5">Followers</div>
+                                <div className="text-[18px] font-semibold text-gray-900 leading-none">
+                                  {formatFollowers((inf.platforms?.instagram || inf.platforms?.youtube || inf.platforms?.tiktok || inf.platforms?.facebook || 0))}
+                                </div>
+                              </div>
+                              <div className="rounded-2xl border border-gray-300 px-3 py-2.5">
+                                <div className="text-xs text-gray-600 leading-none mb-1.5">Engagement</div>
+                                <div className="text-[18px] font-semibold text-gray-900 leading-none">
+                                  {inf.engagement ? `${inf.engagement}%` : 'N/A'}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <p className="text-sm font-semibold text-gray-900">{inf.name}</p>
-                          <p className="text-sm text-gray-600">${inf.startingPrice}</p>
                         </div>
                       ))}
                     </div>
@@ -1903,32 +1914,7 @@ export function InfluencerProfile() {
             )}
           </div>
 
-          {/* Sidebar - Only Desktop */}
-          {!isMobile && (
-            <div className="lg:col-span-1">
-              <Card className="p-6 border-2 border-gray-200 sticky top-4">
-                <h3 className="font-bold text-gray-900 mb-4">Book {influencer.name}</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-600 mb-2 block">Select Package</label>
-                    <select className="w-full p-3 border border-gray-300 rounded-lg text-sm">
-                      {influencer.packages.map((pkg) => (
-                        <option key={pkg.id} value={pkg.id}>
-                          {pkg.type} - ${pkg.price}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <Button className="w-full bg-primary hover:bg-secondary text-black font-semibold">
-                    Add to Cart
-                  </Button>
-                  <Button variant="outline" className="w-full border-gray-300">
-                    Message {influencer.name}
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          )}
+          {/* Booking sidebar hidden for now */}
         </div>
       </div>
 
@@ -1986,3 +1972,6 @@ export function InfluencerProfile() {
     </div>
   );
 }
+
+
+

@@ -707,7 +707,7 @@ export function InfluencerListing() {
     </div>
   );
 
-  const FiltersContent = () => (
+  const renderFiltersContent = () => (
     <div className="h-full overflow-y-auto">
       <div className="flex items-center justify-between mb-6 sticky top-0 bg-card z-10 pb-4">
         <h3 className="font-semibold text-foreground">Filters</h3>
@@ -945,7 +945,7 @@ export function InfluencerListing() {
           {!isMobile && showFilters && (
             <aside className="w-80 flex-shrink-0">
               <Card className="p-6 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto bg-card border-border">
-                <FiltersContent />
+                {renderFiltersContent()}
               </Card>
             </aside>
           )}
@@ -959,7 +959,7 @@ export function InfluencerListing() {
               />
               <div className="absolute inset-y-0 left-0 w-full max-w-sm bg-card shadow-xl">
                 <div className="h-full p-6">
-                  <FiltersContent />
+                  {renderFiltersContent()}
                 </div>
               </div>
             </div>
