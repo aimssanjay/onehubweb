@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Card } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
 import { useBrandSignup } from "../hooks/useBrandSignup";
+import { useCategories } from '../hooks/useCategories';
 import { useNavigate, Link } from 'react-router';
 import {
   Select,
@@ -20,6 +21,7 @@ export function BrandSignup() {
 
   // ✅ Hook use
   const { signup, loading } = useBrandSignup();
+  const { categories, loading: categoriesLoading, error: categoriesError } = useCategories();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -31,17 +33,6 @@ export function BrandSignup() {
 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-
-  const industries = [
-    'Fashion & Apparel',
-    'Beauty & Cosmetics',
-    'Technology',
-    'Food & Beverage',
-    'Fitness & Wellness',
-    'Travel & Hospitality',
-    'Gaming & Entertainment',
-    'Other',
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,18 +139,24 @@ export function BrandSignup() {
               <Select
                 value={formData.industry}
                 onValueChange={(value) => setFormData({ ...formData, industry: value })}
+                disabled={categoriesLoading || categories.length === 0}
               >
                 <SelectTrigger className="cursor-pointer">
-                  <SelectValue placeholder="Select your industry" />
+                  <SelectValue
+                    placeholder={categoriesLoading ? "Loading industries..." : "Select your industry"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {industries.map((item) => (
-                    <SelectItem key={item} value={item} className="cursor-pointer">
-                      {item}
+                  {categories.map((item) => (
+                    <SelectItem key={item.id} value={item.name} className="cursor-pointer">
+                      {item.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {categoriesError && (
+                <p className="text-xs text-red-600 mt-2">{categoriesError}</p>
+              )}
             </div>
 
             <Button type="submit" disabled={loading} className="w-full cursor-pointer">

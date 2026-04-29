@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../services/api';
 
 export interface Category {
   id: number;
@@ -13,11 +14,24 @@ export function useCategories() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://187.124.147.79:4000/api/categories/get-all-categories')
-      .then((res) => res.json())
+    fetch(`${API_BASE_URL}/categories/get-all-categories`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to load categories');
+        }
+        return res.json();
+      })
       .then((data) => {
-        if (data.success) {
-          setCategories(data.data);
+        const categoryList = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.categories)
+            ? data.categories
+            : Array.isArray(data)
+              ? data
+              : [];
+
+        if (categoryList.length > 0) {
+          setCategories(categoryList);
         } else {
           setError('Failed to load categories');
         }
