@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
 
-    server: {
+  server: {
     allowedHosts: ['onehub.ae']
   },
 
