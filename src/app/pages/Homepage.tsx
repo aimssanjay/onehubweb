@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
@@ -19,6 +19,37 @@ interface InfluencerListResponse {
   success?: boolean;
   data?: unknown;
   message?: string;
+}
+
+interface BrandsListResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+interface BrandItem {
+  id: string;
+  name: string;
+  profilePic: string;
+}
+
+function extractBrandRows(payload: unknown): Record<string, unknown>[] {
+  const root = (payload && typeof payload === 'object') ? payload as Record<string, unknown> : {};
+  const data = (root.data && typeof root.data === 'object') ? root.data as Record<string, unknown> : {};
+  const nestedData = (data.data && typeof data.data === 'object') ? data.data as Record<string, unknown> : {};
+
+  const rows =
+    (Array.isArray(data.brands) && data.brands) ||
+    (Array.isArray(data.list) && data.list) ||
+    (Array.isArray(data.rows) && data.rows) ||
+    (Array.isArray(data.data) && data.data) ||
+    (Array.isArray(nestedData.brands) && nestedData.brands) ||
+    (Array.isArray(nestedData.list) && nestedData.list) ||
+    (Array.isArray(nestedData.rows) && nestedData.rows) ||
+    (Array.isArray(root.data) && root.data) ||
+    [];
+
+  return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object');
 }
 
 function parseNumber(value: unknown, fallback = 0): number {
@@ -313,6 +344,8 @@ export function Homepage() {
   const [youtubeSectionInfluencers, setYoutubeSectionInfluencers] = useState<Influencer[]>([]);
   const [tiktokSectionInfluencers, setTiktokSectionInfluencers] = useState<Influencer[]>([]);
   const [isLoadingInfluencers, setIsLoadingInfluencers] = useState(false);
+  const [brands, setBrands] = useState<BrandItem[]>([]);
+  const [isLoadingBrands, setIsLoadingBrands] = useState(false);
   const [hasLoadedApi, setHasLoadedApi] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
 
@@ -396,6 +429,61 @@ export function Homepage() {
       isMounted = false;
     };
   }, [categoryNameById, allCategoryIds]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchBrands = async () => {
+      setIsLoadingBrands(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/brands/brands-list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            page: 1,
+            limit: 20,
+            search: '',
+          }),
+        });
+
+        if (!response.ok) throw new Error('Failed to load brands');
+        const result: BrandsListResponse = await response.json();
+        const rows: Record<string, unknown>[] = extractBrandRows(result);
+
+        const mapped = rows
+          .map((row, index) => ({
+            id: String(row.id ?? row.brand_id ?? `brand-${index + 1}`),
+            name: String(row.name ?? row.brand_name ?? 'Brand').trim() || 'Brand',
+            profilePic: String(
+              row.profile_pic ??
+              row.profile_image ??
+              row.logo ??
+              row.logo_url ??
+              row.image ??
+              ''
+            ).trim(),
+          }))
+          .filter((row) => row.name.length > 0);
+
+        if (isMounted) {
+          setBrands(mapped);
+        }
+      } catch {
+        if (isMounted) {
+          setBrands([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingBrands(false);
+        }
+      }
+    };
+
+    fetchBrands();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -896,6 +984,51 @@ export function Homepage() {
         </div>
       </section>
 
+      {/* Trusted Brands Section */}
+      <section className="py-14 md:py-16 px-4 bg-white">
+        <div className="max-w-[1350px] mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-3">Trusted by 10000+ Brands</h2>
+            <p className="text-muted-foreground text-base md:text-lg">
+              View collaborations from brands like Wealthsimple, Hopper, Deezer, and more.
+            </p>
+          </div>
+
+          {isLoadingBrands ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i} className="p-4 border border-border">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-4 bg-gray-100 rounded mt-3 animate-pulse" />
+                </Card>
+              ))}
+            </div>
+          ) : brands.length > 0 ? (
+            <div className="overflow-x-auto scrollbar-thin pb-2">
+              <div className="flex gap-4 min-w-max">
+                {brands.map((brand) => (
+                  <Card
+                    key={brand.id}
+                    className="w-[180px] lg:w-[calc((100vw-220px)/6)] max-w-[210px] min-w-[160px] p-4 border border-border text-center"
+                  >
+                    <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-gray-100">
+                      {brand.profilePic ? (
+                        <img src={brand.profilePic} alt={brand.name} className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-100" />
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-foreground mt-3 truncate">{brand.name}</p>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">Brands will appear here soon.</p>
+          )}
+        </div>
+      </section>
+
       {/* FAQ Section */}
       <section className="py-16 md:py-20 px-4 bg-black">
         <div className="max-w-[900px] mx-auto">
@@ -1017,4 +1150,3 @@ export function Homepage() {
     </div>
   );
 }
-
