@@ -60,7 +60,7 @@ export default function Registration() {
   e.preventDefault();
 
   try {
-    const response = await fetch("http://187.124.147.79:4000/api/users/register", {
+    const response = await fetch("https://api.onehub.ae/api/users/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

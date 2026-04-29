@@ -13,7 +13,7 @@ export function usePlatforms() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://187.124.147.79:4000/api/platform/get-all-platforms')
+    fetch('https://api.onehub.ae/api/platform/get-all-platforms')
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
