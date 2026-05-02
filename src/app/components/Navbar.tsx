@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Logo } from './Logo';
+
 import { useEffect, useState, useRef } from 'react';
 import { clearInfluencerClientData } from '../utils/influencerStorage';
 
@@ -115,12 +116,12 @@ export function Navbar() {
             <Link to="/browse" className="text-foreground hover:text-primary transition-colors">
               Browse Creators
             </Link>
-            <Link to="/campaigns" className="text-foreground hover:text-primary transition-colors">
+            {/*<Link to="/campaigns" className="text-foreground hover:text-primary transition-colors">
               Campaigns
-            </Link>
-            <Link to="/pricing" className="text-foreground hover:text-primary transition-colors">
+            </Link>*/}
+            {/*<Link to="/pricing" className="text-foreground hover:text-primary transition-colors">
               Pricing
-            </Link>
+            </Link>*/}
             <Link to="/how-it-works" className="text-foreground hover:text-primary transition-colors">
               How It Works
             </Link>

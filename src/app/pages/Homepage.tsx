@@ -85,6 +85,21 @@ function parseJsonSafely(value: string): unknown {
   }
 }
 
+function deriveFallbackRating(seed: string, totalFollowers: number): number {
+  const normalizedFollowers = Math.max(0, totalFollowers);
+  let base =
+    normalizedFollowers >= 1_000_000 ? 4.5 :
+    normalizedFollowers >= 500_000 ? 4.0 :
+    normalizedFollowers >= 100_000 ? 3.5 :
+    3.0;
+
+  const hash = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const variationSteps = [-0.5, 0, 0.5];
+  base += variationSteps[hash % variationSteps.length];
+
+  return Math.max(3, Math.min(5, Math.round(base * 2) / 2));
+}
+
 function toNumberArray(value: unknown): number[] {
   if (Array.isArray(value)) {
     return value.map((item) => parseNumber(item, NaN)).filter((num) => Number.isFinite(num));
@@ -312,6 +327,15 @@ function mapApiInfluencer(
       row.profile_image ||
       'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
   );
+  const platforms = getPlatformFollowersFromRow(row);
+  const totalFollowers =
+    (platforms.instagram || 0) +
+    (platforms.youtube || 0) +
+    (platforms.tiktok || 0);
+  const apiRating = parseNumber(row.rating, 0);
+  const rating = apiRating > 0
+    ? Math.max(3, Math.min(5, Math.round(apiRating * 2) / 2))
+    : deriveFallbackRating(`${row.id ?? row.user_id ?? name}-${index}`, totalFollowers);
 
   return {
     id: String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`),
@@ -326,11 +350,11 @@ function mapApiInfluencer(
     coverImage: String(row.cover_image || profileImage),
     verified: Boolean(row.is_verified),
     featured: Boolean(row.is_featured),
-    platforms: getPlatformFollowersFromRow(row),
+    platforms,
     startingPrice: parseNumber(row.price_start ?? row.base_price, 0),
     packages: [],
     portfolio: [],
-    rating: parseNumber(row.rating, 4.5),
+    rating,
     totalOrders: parseNumber(row.total_orders, 0),
     engagement: getEngagementFromRow(row),
     rawApiData: row,
@@ -616,9 +640,30 @@ export function Homepage() {
     return fromPlatform.slice(0, 12);
   }, [creatorSource, tiktokSectionInfluencers]);
   const ugcCreators = creatorSource.slice(4, 16);
+  const heroVideoColumns = [
+    [
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777039424/myapp-images/users_1777039440316_ABEER%20ALABBADI.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777027212/myapp-images/users_1777027228549_Ahmed%20Abdelrazik.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776631173/myapp-images/users_1776631187247_alladeeb.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776433634/myapp-images/users_1776433647339_mizteriously.jpg',
+    ],
+    [
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776633456/myapp-images/users_1776633470525_B.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777034312/myapp-images/users_1777034327646_ELHAM%20ASSAAD.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776633349/myapp-images/users_1776633363394_Jamila%20Sherwal.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776631595/myapp-images/users_1776631609476_MARASLI.jpg',
+    ],
+    [
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776254099/myapp-images/users_1776254111659_23.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777039302/myapp-images/users_1777039317920_Mohamedali.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776416795/myapp-images/users_1776416809084_parmidamamaghani.jpg',
+      'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777039424/myapp-images/users_1777039440316_ABEER%20ALABBADI.jpg',
+    ],
+  ];
+  const heroBadges = ['AJMAL', 'SONY', 'YAMAHA', 'KAPIVA', 'ORGANIC'];
 
-  const handleSearch = (platform: string, category: string) => {
-    navigate('/browse', { state: { platform, category } });
+  const handleSearch = (platforms: string[], categories: string[]) => {
+    navigate('/browse', { state: { platforms, categories } });
   };
 
   // Navigation helper to match old onNavigate signature
@@ -658,43 +703,128 @@ export function Homepage() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Hero Section with Search */}
-      <section className="relative pt-6 sm:pt-8 pb-12 sm:pb-16 px-4 bg-background">
-        <div className="max-w-[1350px] mx-auto">
-          {/* Main Heading */}
-          <div className="text-center mb-8 sm:mb-10">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold text-foreground mb-3 sm:mb-4 md:mb-6 leading-tight px-2">
-              Hire Influencers & Content<br className="hidden sm:block" />Creators You'll Love
+      <section className="relative pt-6 sm:pt-8 pb-12 sm:pb-16 px-4 bg-black overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-70"
+          style={{
+            backgroundImage:
+              "url('https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=2600&q=80')",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/78" />
+        <div className="relative max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          <div className="text-white relative z-20 text-center lg:text-left">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 md:mb-6 leading-tight">
+              Best <span className="text-primary">Influencer Marketing</span><br />
+              Agency in UAE
             </h1>
-            <p className="text-muted-foreground text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto px-4">
-              The #1 Influencer Marketing Platform. Find and hire top Instagram, TikTok, YouTube, and UGC creators.
+            <p className="text-white/85 text-base md:text-xl leading-relaxed mb-6 md:mb-8 max-w-2xl mx-auto lg:mx-0">
+              One Hub is the #1 influencer marketing platform in UAE helping brands collaborate with
+              top creators and drive high-impact campaigns across social media.
             </p>
+
+            <div className="mb-6 sm:mb-8 md:mb-10">
+              <SearchBar onSearch={handleSearch} />
+            </div>
+
+            <div className="flex flex-wrap gap-4 md:gap-8">
+              <div>
+                <div className="text-2xl md:text-3xl font-bold text-primary">330,000+</div>
+                <div className="text-xs md:text-sm text-white/75">Influencers</div>
+              </div>
+              <div>
+                <div className="text-2xl md:text-3xl font-bold text-primary">10,000+</div>
+                <div className="text-xs md:text-sm text-white/75">Brands</div>
+              </div>
+              <div>
+                <div className="text-2xl md:text-3xl font-bold text-primary">$5M+</div>
+                <div className="text-xs md:text-sm text-white/75">Paid to Creators</div>
+              </div>
+            </div>
           </div>
 
-          {/* Premium Search Bar */}
-          <div className="mb-6 sm:mb-8 md:mb-12">
-            <SearchBar onSearch={handleSearch} />
-          </div>
-
-          {/* Quick Stats Bar */}
-          <div className="flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-8 text-center px-2">
-            <div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary">330,000+</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">Influencers</div>
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary">10,000+</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">Brands</div>
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary">$5M+</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">Paid to Creators</div>
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary">100K+</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">Collaborations</div>
+          <div className="hidden lg:block relative z-10 w-full max-w-[620px] ml-auto overflow-hidden">
+            <div className="grid grid-cols-3 gap-3 h-[700px]">
+            {heroVideoColumns.map((column, columnIndex) => (
+              <div
+                key={`hero-col-${columnIndex}`}
+                className={`space-y-3 ${
+                  columnIndex === 0
+                    ? 'animate-[hero-reel-up_26s_linear_infinite]'
+                    : columnIndex === 1
+                      ? 'animate-[hero-reel-down_30s_linear_infinite]'
+                      : 'animate-[hero-reel-up_34s_linear_infinite]'
+                }`}
+              >
+                {[...column, ...column].map((image, imageIndex) => (
+                  <div
+                    key={`${image}-${imageIndex}`}
+                    className="relative rounded-3xl overflow-hidden h-[270px] border border-white/10 shadow-lg bg-black"
+                  >
+                    <img src={image} alt="Influencer marketing content" className="w-full h-full object-cover" loading="lazy" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                    {(imageIndex + columnIndex) % 2 === 0 && (
+                      <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-semibold bg-white text-[#0d163f] border border-gray-200">
+                        {heroBadges[(imageIndex + columnIndex) % heroBadges.length]}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
             </div>
           </div>
         </div>
+        {/* Mobile reel carousel (same style as desktop) */}
+        <div className="lg:hidden mt-8 flex justify-center">
+          <div className="w-full max-w-[360px] h-[420px] overflow-hidden">
+            <div className="grid grid-cols-3 gap-2 h-full">
+              {heroVideoColumns.map((column, columnIndex) => (
+                <div
+                  key={`mobile-col-${columnIndex}`}
+                  className={`space-y-2 ${
+                    columnIndex === 0
+                      ? 'animate-[hero-reel-up_24s_linear_infinite]'
+                      : columnIndex === 1
+                        ? 'animate-[hero-reel-down_28s_linear_infinite]'
+                        : 'animate-[hero-reel-up_30s_linear_infinite]'
+                  }`}
+                >
+                  {[...column, ...column].map((image, index) => (
+                    <div
+                      key={`mobile-hero-${image}-${index}`}
+                      className="relative rounded-2xl overflow-hidden border border-white/10 h-[140px]"
+                    >
+                      <img
+                        src={image}
+                        alt="Influencer marketing content"
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+                      {(index + columnIndex) % 2 === 0 && (
+                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white text-[#0d163f] border border-gray-200">
+                          {heroBadges[(index + columnIndex) % heroBadges.length]}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <style>{`
+          @keyframes hero-reel-up {
+            from { transform: translateY(0); }
+            to { transform: translateY(-50%); }
+          }
+          @keyframes hero-reel-down {
+            from { transform: translateY(-50%); }
+            to { transform: translateY(0); }
+          }
+        `}</style>
       </section>
 
       {/* Categories Section */}
@@ -949,7 +1079,7 @@ export function Homepage() {
           <div className="text-center mt-12">
             <Button
               size="lg"
-              onClick={() => onNavigate('signup-influencer')}
+              onClick={() => onNavigate('influencer-signup')}
               className="bg-primary hover:bg-[#c19a2e] text-black px-10 cursor-pointer"
             >
               Join as a Creator
@@ -988,40 +1118,46 @@ export function Homepage() {
       <section className="py-14 md:py-16 px-4 bg-white">
         <div className="max-w-[1350px] mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-3">Trusted by 10000+ Brands</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-3">Trusted by Leading Global Brands</h2>
             <p className="text-muted-foreground text-base md:text-lg">
-              View collaborations from brands like Wealthsimple, Hopper, Deezer, and more.
+              Collaborating with top-tier brands to deliver impactful influencer campaigns across the Middle East and beyond.
             </p>
           </div>
 
           {isLoadingBrands ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="p-4 border border-border">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 animate-pulse" />
-                  <div className="h-4 bg-gray-100 rounded mt-3 animate-pulse" />
-                </Card>
+            <div className="flex items-center justify-center gap-10 md:gap-16 py-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-8 w-24 md:h-10 md:w-32 rounded bg-gray-100 animate-pulse" />
               ))}
             </div>
           ) : brands.length > 0 ? (
-            <div className="overflow-x-auto scrollbar-thin pb-2">
-              <div className="flex gap-4 min-w-max">
-                {brands.map((brand) => (
-                  <Card
-                    key={brand.id}
-                    className="w-[180px] lg:w-[calc((100vw-220px)/6)] max-w-[210px] min-w-[160px] p-4 border border-border text-center"
-                  >
-                    <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-gray-100">
-                      {brand.profilePic ? (
-                        <img src={brand.profilePic} alt={brand.name} className="w-full h-full object-cover" loading="lazy" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-100" />
-                      )}
-                    </div>
-                    <p className="text-sm font-medium text-foreground mt-3 truncate">{brand.name}</p>
-                  </Card>
+            <div className="relative overflow-hidden py-3">
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-white to-transparent z-10" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-white to-transparent z-10" />
+              <div className="flex w-max animate-[brand-scroll_32s_linear_infinite] gap-6 md:gap-10 items-center">
+                {[...brands, ...brands].map((brand, index) => (
+                  <div key={`${brand.id}-${index}`} className="shrink-0 h-16 md:h-20 w-[160px] md:w-[210px] flex items-center justify-center overflow-hidden">
+                    {brand.profilePic ? (
+                      <img
+                        src={brand.profilePic}
+                        alt={brand.name}
+                        className="w-full h-full object-cover opacity-100 hover:opacity-90 transition-opacity"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="text-xl md:text-2xl font-semibold text-gray-400 whitespace-nowrap">
+                        {brand.name}
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
+              <style>{`
+                @keyframes brand-scroll {
+                  from { transform: translateX(0); }
+                  to { transform: translateX(-50%); }
+                }
+              `}</style>
             </div>
           ) : (
             <p className="text-center text-sm text-muted-foreground">Brands will appear here soon.</p>
@@ -1109,7 +1245,7 @@ export function Homepage() {
                   {/* Photo 1 */}
                   <div className="w-24 h-32 sm:w-32 sm:h-44 md:w-40 md:h-52 rounded-2xl overflow-hidden transform rotate-[-4deg] shadow-xl flex-shrink-0">
                     <img 
-                      src="https://images.unsplash.com/photo-1662695089339-a2c24231a3ac?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBpbmZsdWVuY2VyJTIwc2VsZmllJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY5Nzc0NTIxfDA&ixlib=rb-4.1.0&q=80&w=400"
+                      src="https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777039424/myapp-images/users_1777039440316_ABEER%20ALABBADI.jpg"
                       alt="Influencer 1"
                       className="w-full h-full object-cover"
                     />
@@ -1118,7 +1254,7 @@ export function Homepage() {
                   {/* Photo 2 */}
                   <div className="w-24 h-32 sm:w-32 sm:h-44 md:w-40 md:h-52 rounded-2xl overflow-hidden transform rotate-[2deg] shadow-xl flex-shrink-0">
                     <img 
-                      src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400"
+                      src="https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777027212/myapp-images/users_1777027228549_Ahmed%20Abdelrazik.jpg"
                       alt="Influencer 2"
                       className="w-full h-full object-cover"
                     />
@@ -1127,7 +1263,7 @@ export function Homepage() {
                   {/* Photo 3 */}
                   <div className="w-24 h-32 sm:w-32 sm:h-44 md:w-40 md:h-52 rounded-2xl overflow-hidden transform rotate-[-3deg] shadow-xl flex-shrink-0">
                     <img 
-                      src="https://images.unsplash.com/photo-1632765891235-d2b594870a99?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3b21hbiUyMGZhc2hpb24lMjBpbmZsdWVuY2VyJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY5Nzc0NTIyfDA&ixlib=rb-4.1.0&q=80&w=400"
+                      src="https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776631173/myapp-images/users_1776631187247_alladeeb.jpg"
                       alt="Influencer 3"
                       className="w-full h-full object-cover"
                     />
@@ -1136,7 +1272,7 @@ export function Homepage() {
                   {/* Photo 4 */}
                   <div className="hidden md:block w-40 h-52 rounded-2xl overflow-hidden transform rotate-[3deg] shadow-xl flex-shrink-0">
                     <img 
-                      src="https://images.unsplash.com/photo-1655119373830-52c5de669a92?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsaWZlc3R5bGUlMjBpbmZsdWVuY2VyJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzY5Nzc0NTIzfDA&ixlib=rb-4.1.0&q=80&w=400"
+                      src="https://res.cloudinary.com/dkdlfnhdm/image/upload/v1776433634/myapp-images/users_1776433647339_mizteriously.jpg"
                       alt="Influencer 4"
                       className="w-full h-full object-cover"
                     />

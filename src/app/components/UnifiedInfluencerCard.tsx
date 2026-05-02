@@ -16,6 +16,13 @@ export function UnifiedInfluencerCard({ influencer, onViewProfile }: UnifiedInfl
 
   // Get total followers from all platforms
   const totalFollowers = Object.values(influencer.platforms).reduce((a, b) => a + b, 0);
+  const hasProfileImage = Boolean(String(influencer.profileImage || '').trim());
+  const initials = String(influencer.name || 'I')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'I';
   
   // Mock data for demo
   const isTopCreator = influencer.featured || Math.random() > 0.7;
@@ -28,12 +35,18 @@ export function UnifiedInfluencerCard({ influencer, onViewProfile }: UnifiedInfl
     >
       {/* Profile Image with Overlays */}
       <div className="w-full aspect-square relative overflow-hidden bg-gray-100">
-        <img
-          src={influencer.profileImage}
-          alt={influencer.name}
-          className="w-full h-full object-cover object-[center_30%] group-hover:scale-105 transition-transform duration-300"
-          style={{ objectPosition: 'center 30%' }}
-        />
+        {hasProfileImage ? (
+          <img
+            src={influencer.profileImage}
+            alt={influencer.name}
+            className="w-full h-full object-cover object-[center_30%] group-hover:scale-105 transition-transform duration-300"
+            style={{ objectPosition: 'center 30%' }}
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
+            <span className="text-5xl font-bold text-gray-700">{initials}</span>
+          </div>
+        )}
         
         {/* Top Badges - Top Creator, Verified */}
         <div className="absolute top-3 left-3 flex gap-2">

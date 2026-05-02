@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { usePlatforms } from '../hooks/usePlatforms';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -149,8 +149,24 @@ function parseJsonSafely(value: string): unknown {
   }
 }
 
+function deriveFallbackRating(seed: string, totalFollowers: number): number {
+  const normalizedFollowers = Math.max(0, totalFollowers);
+  let base =
+    normalizedFollowers >= 1_000_000 ? 4.5 :
+    normalizedFollowers >= 500_000 ? 4.0 :
+    normalizedFollowers >= 100_000 ? 3.5 :
+    3.0;
+
+  const hash = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const variationSteps = [-0.5, 0, 0.5];
+  base += variationSteps[hash % variationSteps.length];
+
+  return Math.max(3, Math.min(5, Math.round(base * 2) / 2));
+}
+
 export function InfluencerListing() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { platforms: apiPlatforms } = usePlatforms();
   const { categories } = useCategories();
 
@@ -210,6 +226,51 @@ export function InfluencerListing() {
     key: p.name.toLowerCase(),
     label: p.name,
   }));
+
+  useEffect(() => {
+    const rawState = (location.state && typeof location.state === 'object')
+      ? (location.state as Record<string, unknown>)
+      : {};
+
+    const toStringArray = (value: unknown): string[] => {
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => String(item ?? '').trim())
+          .filter(Boolean);
+      }
+      if (typeof value === 'string') {
+        const single = value.trim();
+        return single ? [single] : [];
+      }
+      return [];
+    };
+
+    const platformNames = toStringArray(rawState.platforms ?? rawState.platform);
+    const categoryNames = toStringArray(rawState.categories ?? rawState.category);
+    if (platformNames.length === 0 && categoryNames.length === 0) return;
+
+    const platformIdByName = new Map(
+      apiPlatforms.map((platform) => [normalizePlatformName(platform.name), platform.id])
+    );
+    const categoryIdByName = new Map(
+      categories.map((category) => [category.name.trim().toLowerCase(), category.id])
+    );
+
+    const initialPlatformIds = platformNames
+      .map((name) => platformIdByName.get(normalizePlatformName(name)) ?? null)
+      .filter((id): id is number => Number.isFinite(id ?? NaN));
+    const initialCategoryIds = categoryNames
+      .map((name) => categoryIdByName.get(name.trim().toLowerCase()) ?? null)
+      .filter((id): id is number => Number.isFinite(id ?? NaN));
+
+    if (initialPlatformIds.length > 0) {
+      setSelectedPlatforms(initialPlatformIds);
+    }
+    if (initialCategoryIds.length > 0) {
+      setSelectedCategories(initialCategoryIds);
+    }
+    setCurrentPage(1);
+  }, [location.state, apiPlatforms, categories]);
 
   const categoryNameById = useMemo(
     () => new Map(categories.map((category) => [category.id, category.name])),
@@ -456,8 +517,8 @@ export function InfluencerListing() {
     const profileImage = String(
       row.profile_pic ||
       row.profile_image ||
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400'
-    );
+      ''
+    ).trim();
     const coverImage = String(row.cover_image || profileImage);
     const city = String(row.city_name || row.city || '').trim();
     const country = String(row.country_name || row.country || '').trim();
@@ -478,7 +539,14 @@ export function InfluencerListing() {
       row.average_engagement_rate,
       engagementFromPlatforms
     );
-    const rating = parseNumber(row.rating, 4.5);
+    const totalFollowers =
+      (platforms.instagram || 0) +
+      (platforms.youtube || 0) +
+      (platforms.tiktok || 0);
+    const apiRating = parseNumber(row.rating, 0);
+    const rating = apiRating > 0
+      ? Math.max(3, Math.min(5, Math.round(apiRating * 2) / 2))
+      : deriveFallbackRating(`${row.id || row.user_id || name}-${index}`, totalFollowers);
     const id = String(row.id || row.user_id || row.influencer_id || `api-${index + 1}`);
     const slug = String(
       row.slug ||

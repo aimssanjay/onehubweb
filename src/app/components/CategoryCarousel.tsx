@@ -87,43 +87,71 @@ export function CategoryCarousel({ onCategorySelect }: CategoryCarouselProps) {
         </div>
       </div>
 
-      <Slider ref={sliderRef} {...settings}>
-        {categories.map((category) => (
-          <div key={category.id} className="px-2">
+      {/* Mobile: clean snap row for better alignment */}
+      <div className="md:hidden -mx-1 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin">
+        <div className="flex gap-3 px-1">
+          {categories.map((category) => (
             <button
+              key={category.id}
               onClick={() => onCategorySelect?.(category.name)}
-              className="relative w-full h-[180px] sm:h-[200px] rounded-2xl overflow-hidden group transition-transform hover:scale-105 cursor-pointer"
+              className="relative h-[180px] w-[42vw] min-w-[140px] max-w-[170px] rounded-2xl overflow-hidden shrink-0 snap-start"
             >
-              {/* Category Image */}
               <img
                 src={category.image ?? FALLBACK_IMAGE}
                 alt={category.name}
                 className="w-full h-full object-cover"
               />
-              
-              {/* Dark Overlay */}
-              <div 
-                className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"
-              />
-              
-              {/* Category Name */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <h3 className="text-white font-semibold text-base sm:text-lg">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-3">
+                <h3 className="text-white font-semibold text-base leading-tight">
                   {category.name}
                 </h3>
               </div>
-
-              {/* Hover Border Effect */}
-              <div 
-                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{
-                  border: '3px solid #D4AF37',
-                }}
-              />
             </button>
-          </div>
-        ))}
-      </Slider>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop/Tablet: slider */}
+      <div className="hidden md:block">
+        <Slider ref={sliderRef} {...settings}>
+          {categories.map((category) => (
+            <div key={category.id} className="px-2">
+              <button
+                onClick={() => onCategorySelect?.(category.name)}
+                className="relative w-full h-[180px] sm:h-[200px] rounded-2xl overflow-hidden group transition-transform hover:scale-105 cursor-pointer"
+              >
+                {/* Category Image */}
+                <img
+                  src={category.image ?? FALLBACK_IMAGE}
+                  alt={category.name}
+                  className="w-full h-full object-cover"
+                />
+                
+                {/* Dark Overlay */}
+                <div 
+                  className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"
+                />
+                
+                {/* Category Name */}
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <h3 className="text-white font-semibold text-base sm:text-lg">
+                    {category.name}
+                  </h3>
+                </div>
+
+                {/* Hover Border Effect */}
+                <div 
+                  className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{
+                    border: '3px solid #D4AF37',
+                  }}
+                />
+              </button>
+            </div>
+          ))}
+        </Slider>
+      </div>
     </div>
   );
 }

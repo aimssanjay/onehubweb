@@ -1,8 +1,5 @@
-import { Search, ChevronDown, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronDown, Check, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import Slider from 'react-slick';
-import 'slick-carousel/slick/slick.css';
-import 'slick-carousel/slick/slick-theme.css';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 
@@ -17,16 +14,17 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
   const { platforms } = usePlatforms();
   const { categories: categoryData } = useCategories();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategoryKeys, setSelectedCategoryKeys] = useState<string[]>([]);
+  const [selectedCategoryLabels, setSelectedCategoryLabels] = useState<Record<string, string>>({});
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   
   const platformRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns when clicking outside
+  // Close dropdowns when tapping/clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (platformRef.current && !platformRef.current.contains(event.target as Node)) {
         setShowPlatformDropdown(false);
       }
@@ -36,8 +34,24 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
+
+  const getCategoryLabel = (category: unknown) => {
+    const row = (category && typeof category === 'object') ? category as Record<string, unknown> : {};
+    const name = String(row.name ?? row.category_name ?? row.title ?? row.slug ?? '').trim();
+    return name || `Category ${String(row.id ?? '').trim()}`;
+  };
+
+  const getCategoryKey = (id: unknown) => String(id ?? '').trim();
+
+  const selectedCategoryNames = selectedCategoryKeys
+    .map((key) => selectedCategoryLabels[key] || '')
+    .filter(Boolean);
 
   const handlePlatformToggle = (platform: string) => {
     const newSelection = selectedPlatforms.includes(platform)
@@ -48,13 +62,17 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
     onPlatformChange?.(newSelection);
   };
 
-  const handleCategoryToggle = (category: string) => {
-    const newSelection = selectedCategories.includes(category)
-      ? selectedCategories.filter((c) => c !== category)
-      : [...selectedCategories, category];
-    
-    setSelectedCategories(newSelection);
-    onCategoryChange?.(newSelection);
+  const handleCategoryToggle = (category: { id: unknown; label: string }) => {
+    const categoryKey = getCategoryKey(category.id);
+    const newSelection = selectedCategoryKeys.includes(categoryKey)
+      ? selectedCategoryKeys.filter((key) => key !== categoryKey)
+      : [...selectedCategoryKeys, categoryKey];
+
+    setSelectedCategoryKeys(newSelection);
+    setSelectedCategoryLabels((prev) => ({ ...prev, [categoryKey]: category.label }));
+    const names = newSelection.map((key) => selectedCategoryLabels[key] || (key === categoryKey ? category.label : '')).filter(Boolean);
+    onCategoryChange?.(names);
+    setShowCategoryDropdown(false);
   };
 
   const removePlatform = (platform: string, e: React.MouseEvent) => {
@@ -64,15 +82,30 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
     onPlatformChange?.(newSelection);
   };
 
-  const removeCategory = (category: string, e: React.MouseEvent) => {
+  const removeCategory = (categoryKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const newSelection = selectedCategories.filter((c) => c !== category);
-    setSelectedCategories(newSelection);
-    onCategoryChange?.(newSelection);
+    const newSelection = selectedCategoryKeys.filter((key) => key !== categoryKey);
+    setSelectedCategoryKeys(newSelection);
+    const names = newSelection.map((key) => selectedCategoryLabels[key] || '').filter(Boolean);
+    onCategoryChange?.(names);
   };
 
   const handleSearch = () => {
-    onSearch?.(selectedPlatforms, selectedCategories);
+    onSearch?.(selectedPlatforms, selectedCategoryNames);
+  };
+
+  const selectMobilePlatform = (event: React.PointerEvent<HTMLButtonElement>, platformName: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handlePlatformToggle(platformName);
+    setShowPlatformDropdown(false);
+  };
+
+  const selectMobileCategory = (event: React.PointerEvent<HTMLButtonElement>, category: { id: unknown; label: string }) => {
+    // Pointer event is more reliable than click on mobile dropdown options.
+    event.preventDefault();
+    event.stopPropagation();
+    handleCategoryToggle(category);
   };
 
   const getPlatformDisplayText = () => {
@@ -82,9 +115,9 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
   };
 
   const getCategoryDisplayText = () => {
-    if (selectedCategories.length === 0) return 'Choose categories';
-    if (selectedCategories.length === 1) return selectedCategories[0];
-    return `${selectedCategories.length} categories selected`;
+    if (selectedCategoryNames.length === 0) return 'Choose categories';
+    if (selectedCategoryNames.length === 1) return selectedCategoryNames[0];
+    return `${selectedCategoryNames.length} categories selected`;
   };
 
   return (
@@ -152,8 +185,9 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
             >
               {platforms.map((platform) => (
                 <button
+                  type="button"
                   key={platform.id}
-                  onClick={() => handlePlatformToggle(platform.name)}
+                  onPointerDown={(event) => selectMobilePlatform(event, platform.name)}
                   className="w-full px-5 py-3 text-left text-[14px] hover:bg-[#f5f5f7] transition-colors flex items-center justify-between cursor-pointer"
                   style={{
                     color: selectedPlatforms.includes(platform.name) ? '#D4AF37' : '#1a1a1a',
@@ -187,7 +221,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
             >
               Category
             </span>
-            {selectedCategories.length === 0 ? (
+            {selectedCategoryKeys.length === 0 ? (
               <span 
                 className="text-[14px] font-normal leading-tight block"
                 style={{ color: '#737373' }}
@@ -195,26 +229,34 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                 Choose categories
               </span>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {selectedCategories.map((category) => (
-                  <span
-                    key={category}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-[12px] rounded-lg"
-                    style={{
-                      backgroundColor: 'rgba(212, 175, 55, 0.15)',
-                      color: '#D4AF37',
-                      border: '1px solid #D4AF37',
+              <div className="space-y-2">
+                <span className="text-[13px] font-medium leading-tight block text-[#1a1a1a]">
+                  {getCategoryDisplayText()}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategoryKeys.map((categoryKey) => {
+                    const selectedLabel = selectedCategoryLabels[categoryKey] || 'Category';
+                    return (
+                    <span
+                      key={categoryKey}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-[12px] rounded-lg"
+                      style={{
+                        backgroundColor: 'rgba(212, 175, 55, 0.15)',
+                        color: '#8C6A00',
+                        border: '1px solid #D4AF37',
                     }}
                   >
-                    {category}
-                    <button
-                      onClick={(e) => removeCategory(category, e)}
-                      className="hover:opacity-70 cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
+                      {selectedLabel}
+                      <button
+                        onClick={(e) => removeCategory(categoryKey, e)}
+                        className="hover:opacity-70 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </button>
@@ -237,16 +279,19 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
               <div className="flex flex-wrap gap-2">
                 {categoryData.map((category) => (
                   <button
+                    type="button"
                     key={category.id}
-                    onClick={() => handleCategoryToggle(category.name)}
+                    onPointerDown={(event) =>
+                      selectMobileCategory(event, { id: category.id, label: getCategoryLabel(category) })
+                    }
                     className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)] cursor-pointer"
                     style={{
-                      backgroundColor: selectedCategories.includes(category.name) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
-                      borderColor: selectedCategories.includes(category.name) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',
-                      color: selectedCategories.includes(category.name) ? '#D4AF37' : '#1a1a1a',
+                      backgroundColor: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
+                      borderColor: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',
+                      color: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? '#D4AF37' : '#1a1a1a',
                     }}
                   >
-                    {category.name}
+                    {getCategoryLabel(category)}
                   </button>
                 ))}
               </div>
@@ -386,7 +431,7 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                 }}
               />
             </div>
-            {selectedCategories.length === 0 ? (
+            {selectedCategoryKeys.length === 0 ? (
               <span 
                 className="text-[14px] font-normal leading-tight"
                 style={{ color: '#737373' }}
@@ -395,9 +440,11 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
               </span>
             ) : (
               <div className="flex flex-wrap gap-1">
-                {selectedCategories.map((category) => (
+                {selectedCategoryKeys.map((categoryKey) => {
+                  const selectedLabel = selectedCategoryLabels[categoryKey] || 'Category';
+                  return (
                   <span
-                    key={category}
+                    key={categoryKey}
                     className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded"
                     style={{
                       backgroundColor: 'rgba(212, 175, 55, 0.15)',
@@ -405,15 +452,16 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
                       border: '1px solid #D4AF37',
                     }}
                   >
-                    {category}
+                    {selectedLabel}
                     <button
-                      onClick={(e) => removeCategory(category, e)}
+                      onClick={(e) => removeCategory(categoryKey, e)}
                       className="hover:opacity-70 cursor-pointer"
                     >
                       <X className="w-3 h-3" />
                     </button>
                   </span>
-                ))}
+                  );
+                })}
               </div>
             )}
           </button>
@@ -436,16 +484,17 @@ export function SearchBar({ onSearch, onPlatformChange, onCategoryChange }: Sear
               <div className="flex flex-wrap gap-2">
                 {categoryData.map((category) => (
                   <button
+                    type="button"
                     key={category.id}
-                    onClick={() => handleCategoryToggle(category.name)}
+                    onClick={() => handleCategoryToggle({ id: category.id, label: getCategoryLabel(category) })}
                     className="px-3 py-1.5 text-[13px] rounded-lg border transition-all hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.1)] cursor-pointer"
                     style={{
-                      backgroundColor: selectedCategories.includes(category.name) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
-                      borderColor: selectedCategories.includes(category.name) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',
-                      color: selectedCategories.includes(category.name) ? '#D4AF37' : '#1a1a1a',
+                      backgroundColor: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? 'rgba(212, 175, 55, 0.15)' : '#f5f5f7',
+                      borderColor: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? '#D4AF37' : 'rgba(212, 175, 55, 0.2)',
+                      color: selectedCategoryKeys.includes(getCategoryKey(category.id)) ? '#D4AF37' : '#1a1a1a',
                     }}
                   >
-                    {category.name}
+                    {getCategoryLabel(category)}
                   </button>
                 ))}
               </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
+import logo from "../../assets/logo.webp";
 
 interface LogoProps {
   className?: string;
@@ -9,12 +10,12 @@ interface LogoProps {
 export function Logo({ className = "h-16", onClick }: LogoProps) {
   const [imageError, setImageError] = useState(false);
 
-  // Try to load the One Hub logo, fallback to custom logo if it fails
+  // ✅ Try image first
   if (!imageError) {
     return (
       <img 
-        src="https://onehub.ae/wp-content/uploads/2023/10/One-Hub-Logo.webp" 
-        alt="One Hub" 
+        src={logo}
+        alt="Logo"
         className={className}
         style={{ objectFit: 'contain' }}
         onError={() => setImageError(true)}
@@ -23,7 +24,7 @@ export function Logo({ className = "h-16", onClick }: LogoProps) {
     );
   }
 
-  // Fallback custom logo
+  // ✅ Fallback custom logo
   return (
     <div 
       className={`flex items-center gap-2 ${className}`}
