@@ -832,10 +832,15 @@ function mapPublicProfileToInfluencer(
     : fallbackEngagementRaw > 0
       ? formatEngagementValue(fallbackEngagementRaw)
       : deriveFallbackEngagement(`${row.id || row.user_id || slug || name}`, totalFollowers);
+  const ratingSeed = `${row.id || row.user_id || slug || name}`;
+  const fallbackRating = deriveFallbackRating(ratingSeed, totalFollowers);
   const apiRating = parseNumber(row.rating, 0);
-  const rating = apiRating > 0
+  const normalizedApiRating = apiRating > 0
     ? Math.max(3, Math.min(5, Math.round(apiRating * 2) / 2))
-    : deriveFallbackRating(`${row.id || row.user_id || slug || name}`, totalFollowers);
+    : 0;
+  const rating = normalizedApiRating > 0
+    ? (normalizedApiRating >= 5 ? fallbackRating : normalizedApiRating)
+    : fallbackRating;
   const gallery = extractGalleryFromApi(row);
 
   return {
@@ -1594,7 +1599,9 @@ export function InfluencerProfile() {
                   <h2 className="text-lg md:text-xl font-bold text-gray-900">{influencer.name}</h2>
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold text-gray-900 text-sm">5.0</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {Number.isFinite(Number(influencer.rating)) ? Number(influencer.rating).toFixed(1) : '4.5'}
+                    </span>
                   </div>
                   <span className="text-gray-500 text-sm">·</span>
                   <a href="#faqs" className="text-gray-700 underline hover:text-gray-900 text-sm">
