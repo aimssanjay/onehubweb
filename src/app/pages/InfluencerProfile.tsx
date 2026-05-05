@@ -675,6 +675,66 @@ function extractGalleryFromApi(row: Record<string, unknown>): string[] {
   return Array.from(urls).slice(0, 10);
 }
 
+function getGalleryStorageKeysForProfile(source: Record<string, unknown> | null | undefined): string[] {
+  if (!source) return [];
+  const userRaw = localStorage.getItem('influencer_user');
+  const cachedUser = (() => {
+    if (!userRaw) return null;
+    try {
+      return JSON.parse(userRaw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  })();
+
+  const candidates = [
+    source.id,
+    source.user_id,
+    source.influencer_id,
+    source.email,
+    source.slug,
+    source.username,
+    source.handle,
+    source.name ? toSlug(String(source.name)) : '',
+    cachedUser?.id,
+    cachedUser?.user_id,
+    cachedUser?.influencer_id,
+    cachedUser?.email,
+    cachedUser?.slug,
+    cachedUser?.username,
+    cachedUser?.handle,
+    cachedUser?.name ? toSlug(String(cachedUser.name)) : '',
+  ]
+    .map((value) => String(value ?? '').replace(/^@/, '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(candidates)).map((scope) => `influencer_gallery_images:${scope}`);
+}
+
+function loadCachedGalleryForProfile(source: Record<string, unknown> | null | undefined): string[] {
+  const keys = getGalleryStorageKeysForProfile(source);
+  for (const key of keys) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+      const urls = parsed
+        .map((item: unknown) => {
+          if (item && typeof item === 'object' && 'preview' in (item as Record<string, unknown>)) {
+            return String((item as Record<string, unknown>).preview ?? '').trim();
+          }
+          return '';
+        })
+        .filter((url: string) => /^https?:\/\//i.test(url) || url.startsWith('/'));
+      if (urls.length > 0) return Array.from(new Set(urls)).slice(0, 10);
+    } catch {
+      // ignore bad cache
+    }
+  }
+  return [];
+}
+
 function hasProfileImage(image: unknown): boolean {
   const value = String(image ?? '').trim().toLowerCase();
   return Boolean(value && value !== 'null' && value !== 'undefined');
@@ -841,7 +901,14 @@ function mapPublicProfileToInfluencer(
   const rating = normalizedApiRating > 0
     ? (normalizedApiRating >= 5 ? fallbackRating : normalizedApiRating)
     : fallbackRating;
-  const gallery = extractGalleryFromApi(row);
+  const galleryFromApi = extractGalleryFromApi(row);
+  const cachedGallery = loadCachedGalleryForProfile(row);
+  const apiIsSubsetOfCache =
+    galleryFromApi.length > 0 &&
+    galleryFromApi.every((url) => cachedGallery.includes(url));
+  const gallery = cachedGallery.length > galleryFromApi.length && apiIsSubsetOfCache
+    ? cachedGallery
+    : galleryFromApi;
 
   return {
     id: String(row.id || row.user_id || row.influencer_id || fallback?.id || slug || 'public-profile'),

@@ -46,6 +46,25 @@ type GalleryImageItem = {
   name?: string;
 };
 
+const createTinyPngFile = () => {
+  const tinyPngBytes = Uint8Array.from([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+    0, 0, 0, 1, 0, 0, 0, 1, 8, 4, 0, 0, 0, 181, 28, 12, 2,
+    0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 31, 0, 3,
+    3, 1, 255, 165, 250, 45, 97, 0, 0, 0, 0, 73, 69, 78, 68, 174,
+    66, 96, 130,
+  ]);
+  return new File([tinyPngBytes], 'clear-gallery.png', { type: 'image/png' });
+};
+
+const isLikelyValidGalleryUrl = (value: string) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return false;
+  if (raw === '/' || raw === '#') return false;
+  if (raw.toLowerCase().includes('clear-gallery')) return false;
+  return /^https?:\/\//i.test(raw) || raw.startsWith('/');
+};
+
 const PLATFORM_CONFIG = [
   { platformId: 1, name: 'Instagram', icon: Instagram, color: 'from-purple-600 to-pink-600' },
   { platformId: 3, name: 'TikTok', icon: Video, color: 'from-gray-800 to-gray-700' },
@@ -215,7 +234,7 @@ const extractGalleryImageUrls = (source: any): string[] => {
   };
 
   candidates.forEach((candidate) => visit(candidate));
-  return Array.from(urls).slice(0, 5);
+  return Array.from(urls).filter(isLikelyValidGalleryUrl).slice(0, 5);
 };
 
 export default function InfluencerDashboard() {
@@ -770,8 +789,20 @@ export default function InfluencerDashboard() {
         .filter(Boolean)
     );
     const galleryUrls = extractGalleryImageUrls(data);
-    if (galleryUrls.length > 0) {
-      const normalized = galleryUrls.map((url, index) => ({
+    const cachedGallery = loadGalleryFromLocalCache(data);
+    const cachedUrls = cachedGallery
+      .map((item) => String(item.preview || '').trim())
+      .filter(Boolean);
+    const isApiSubsetOfCache =
+      galleryUrls.length > 0 &&
+      galleryUrls.every((url) => cachedUrls.includes(url));
+    const selectedGalleryUrls =
+      cachedUrls.length > galleryUrls.length && isApiSubsetOfCache
+        ? cachedUrls
+        : galleryUrls;
+
+    if (selectedGalleryUrls.length > 0) {
+      const normalized = selectedGalleryUrls.map((url, index) => ({
         id: `api-${index}-${url.slice(-16)}`,
         preview: url,
         name: `gallery-${index + 1}`,
@@ -781,6 +812,15 @@ export default function InfluencerDashboard() {
       setIsGalleryDirty(false);
       try {
         saveGalleryToLocalCache(normalized, data);
+      } catch {
+        // ignore local cache errors
+      }
+    } else if (hasGalleryDataInPayload(data) && cachedGallery.length === 0) {
+      setGalleryImages([]);
+      setHasSavedGallery(false);
+      setIsGalleryDirty(false);
+      try {
+        saveGalleryToLocalCache([], data);
       } catch {
         // ignore local cache errors
       }
@@ -845,6 +885,7 @@ export default function InfluencerDashboard() {
       try {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) continue;
+        if (parsed.length === 0) return [];
         const loaded = parsed
           .filter((item) => item && typeof item === 'object' && typeof item.preview === 'string')
           .slice(0, 5)
@@ -859,6 +900,31 @@ export default function InfluencerDashboard() {
       }
     }
     return [];
+  };
+
+  const hasGalleryDataInPayload = (data: any) => {
+    if (!data || typeof data !== 'object') return false;
+    const influencer = data?.influencer;
+    return [
+      data?.gallery,
+      data?.gallery_images,
+      data?.influencer_galleries,
+      data?.gallery_pics,
+      data?.gallery_pic,
+      data?.portfolio,
+      data?.portfolio_images,
+      data?.galleryPhotos,
+      data?.influencer_gallery,
+      data?.influencer_gallery_images,
+      data?.images,
+      data?.media,
+      influencer?.gallery,
+      influencer?.gallery_images,
+      influencer?.influencer_galleries,
+      influencer?.gallery_pic,
+      influencer?.influencer_gallery,
+      influencer?.influencer_gallery_images,
+    ].some((value) => value !== undefined && value !== null);
   };
 
   const appendGalleryFiles = (files: File[]) => {
@@ -916,11 +982,10 @@ export default function InfluencerDashboard() {
     setIsGalleryDirty(true);
   };
 
-  const handleSaveGallery = async () => {
-    if (galleryImages.length === 0) {
-      toast.error('Please add at least one image before saving');
-      return;
-    }
+  const clearAllGalleryImages = async () => {
+    if (galleryImages.length === 0) return;
+    const confirmed = window.confirm('Clear all gallery images?');
+    if (!confirmed) return;
 
     const token = localStorage.getItem('influencer_token');
     if (!token) {
@@ -930,39 +995,191 @@ export default function InfluencerDashboard() {
 
     setIsSavingGallery(true);
     try {
-      const filesToUpload = galleryImages
+      const localFiles = galleryImages
         .filter((item) => item.file instanceof File)
         .map((item) => item.file as File);
-
-      if (filesToUpload.length === 0) {
-        toast.error('Please choose at least one new image to upload');
-        setIsSavingGallery(false);
-        return;
+      const filesForValidator = [...localFiles].slice(0, 5);
+      if (filesForValidator.length === 0) {
+        filesForValidator.push(createTinyPngFile());
       }
 
-      const formData = new FormData();
-      filesToUpload.forEach((file) => {
-        formData.append('gallery_pic', file);
+      const payload = new FormData();
+      payload.append('clear_gallery', '1');
+      payload.append('keep_existing', '0');
+      payload.append('existing_gallery', '[]');
+      payload.append('existing_gallery_images', '[]');
+      payload.append('gallery_urls', '[]');
+      filesForValidator.forEach((file) => {
+        payload.append('gallery_pic', file);
       });
 
       const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
         method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+        headers: { Authorization: `Bearer ${token}` },
+        body: payload,
       });
-      const result = await response.json();
+      const raw = await response.text().catch(() => '');
+      const result = (() => {
+        try {
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return { message: raw };
+        }
+      })();
       if (!(result?.success || response.ok)) {
-        toast.error(result?.message || 'Failed to upload gallery images');
+        toast.error(
+          result?.message ||
+          result?.error ||
+          `Failed to clear gallery images (${response.status})`
+        );
         return;
       }
 
-      const apiUrls = extractGalleryImageUrls(result);
+      galleryImages.forEach((item) => {
+        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+      });
+      setGalleryImages([]);
+      setHasSavedGallery(false);
+      setIsGalleryDirty(false);
+      saveGalleryToLocalCache([]);
+      window.dispatchEvent(new Event('influencer-profile-updated'));
+      toast.success('Gallery images cleared');
+    } catch {
+      toast.error('Failed to clear gallery images');
+    } finally {
+      setIsSavingGallery(false);
+    }
+  };
+
+  const handleSaveGallery = async () => {
+    const token = localStorage.getItem('influencer_token');
+    if (!token) {
+      toast.error('Please login again');
+      return;
+    }
+
+    setIsSavingGallery(true);
+    try {
+      const toAbsoluteGalleryUrl = (value: string) => {
+        const raw = String(value ?? '').trim();
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (raw.startsWith('//')) return `${window.location.protocol}${raw}`;
+
+        if (raw.startsWith('/')) {
+          try {
+            // Prefer API host for media paths returned by backend.
+            const apiOrigin = new URL(API_BASE_URL).origin;
+            return `${apiOrigin}${raw}`;
+          } catch {
+            return `${window.location.origin}${raw}`;
+          }
+        }
+
+        return raw;
+      };
+      const filesToUpload = galleryImages
+        .filter((item) => item.file instanceof File)
+        .map((item) => item.file as File);
+      const existingUrls = galleryImages
+        .filter((item) => !(item.file instanceof File) && typeof item.preview === 'string' && item.preview.trim())
+        .map((item) => toAbsoluteGalleryUrl(item.preview.trim()))
+        .filter(Boolean)
+        .filter(isLikelyValidGalleryUrl);
+      const allFilesToUpload = filesToUpload.slice(0, 5);
+      const buildGalleryPayload = (files: File[], urls: string[]) => {
+        const payload = new FormData();
+        payload.append('clear_gallery', galleryImages.length === 0 ? '1' : '0');
+        payload.append('keep_existing', galleryImages.length > 0 ? '1' : '0');
+        payload.append('existing_gallery', JSON.stringify(urls));
+        payload.append('existing_gallery_images', JSON.stringify(urls));
+        payload.append('gallery_urls', JSON.stringify(urls));
+        files.forEach((file) => {
+          payload.append('gallery_pic', file);
+        });
+        return payload;
+      };
+
+      const submitGalleryUpdate = async (files: File[], urls: string[]) => {
+        const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: buildGalleryPayload(files, urls),
+        });
+        const raw = await response.text().catch(() => '');
+        const result = (() => {
+          try {
+            return raw ? JSON.parse(raw) : {};
+          } catch {
+            return { message: raw };
+          }
+        })();
+        return { response, result };
+      };
+
+      let response: Response;
+      let result: any;
+      let finalUrls = [...existingUrls];
+
+      if (allFilesToUpload.length <= 1) {
+        const single = await submitGalleryUpdate(allFilesToUpload, existingUrls);
+        response = single.response;
+        result = single.result;
+        finalUrls = Array.from(new Set([...existingUrls, ...extractGalleryImageUrls(result)])).slice(0, 5);
+      } else {
+        // Upload one-by-one for backend compatibility (many APIs accept one multipart file per request).
+        let rollingUrls = [...existingUrls];
+        let failedStep: { response: Response; result: any } | null = null;
+
+        for (const file of allFilesToUpload) {
+          const step = await submitGalleryUpdate([file], rollingUrls);
+          const stepSucceeded = step.result?.success || step.response.ok;
+          if (!stepSucceeded) {
+            failedStep = step;
+            break;
+          }
+
+          const stepUrls = extractGalleryImageUrls(step.result);
+          if (stepUrls.length > 0) {
+            rollingUrls = Array.from(new Set([...rollingUrls, ...stepUrls])).slice(0, 5);
+          }
+        }
+
+        if (failedStep) {
+          response = failedStep.response;
+          result = failedStep.result;
+        } else {
+          response = new Response(null, { status: 200 });
+          result = { success: true };
+          finalUrls = rollingUrls;
+        }
+      }
+
+      if (!(result?.success || response.ok)) {
+        toast.error(
+          result?.message ||
+          result?.error ||
+          `Failed to save gallery images (${response.status})`
+        );
+        return;
+      }
+
+      if (galleryImages.length === 0) {
+        setGalleryImages([]);
+        setHasSavedGallery(false);
+        setIsGalleryDirty(false);
+        saveGalleryToLocalCache([]);
+        window.dispatchEvent(new Event('influencer-profile-updated'));
+        toast.success('Gallery images updated');
+        return;
+      }
+
       const retainedUrls = galleryImages
         .filter((item) => !item.file && item.preview)
         .map((item) => item.preview);
-      const mergedUrls = Array.from(new Set([...retainedUrls, ...apiUrls])).slice(0, 5);
+      const mergedUrls = Array.from(new Set([...retainedUrls, ...finalUrls])).slice(0, 5);
       const normalized = mergedUrls.map((url, index) => ({
         id: `api-${index}-${url.slice(-16)}`,
         preview: url,
@@ -2163,10 +2380,19 @@ export default function InfluencerDashboard() {
                 <div className="space-y-4">
                   {/* Gallery Images */}
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                    <div className="mb-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="font-bold text-white">Gallery Images</h3>
-                      <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
+                      {galleryImages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAllGalleryImages}
+                          className="text-xs font-medium text-red-400 hover:text-red-300"
+                        >
+                          Clear All
+                        </button>
+                      )}
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
 
                     {galleryImages.length > 0 && (
                       <div className="grid grid-cols-3 gap-2 mt-3">
@@ -2228,9 +2454,9 @@ export default function InfluencerDashboard() {
                     <button
                       type="button"
                       onClick={handleSaveGallery}
-                      disabled={isSavingGallery || galleryImages.length === 0 || !isGalleryDirty}
+                      disabled={isSavingGallery || !isGalleryDirty}
                       className={`mt-3 w-full py-2 text-sm font-semibold rounded-lg transition-colors ${
-                        isSavingGallery || galleryImages.length === 0 || !isGalleryDirty
+                        isSavingGallery || !isGalleryDirty
                           ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                           : 'bg-primary hover:bg-secondary text-black'
                       }`}
