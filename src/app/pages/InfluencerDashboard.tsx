@@ -46,6 +46,11 @@ type GalleryImageItem = {
   name?: string;
 };
 
+const MAX_GALLERY_IMAGE_COUNT = 5;
+// Backend currently rejects larger multipart payloads with HTTP 413.
+const MAX_GALLERY_IMAGE_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per image
+const MAX_GALLERY_TOTAL_SIZE_BYTES = 4 * 1024 * 1024; // 4MB total per save
+
 const createTinyPngFile = () => {
   const tinyPngBytes = Uint8Array.from([
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
@@ -891,26 +896,28 @@ export default function InfluencerDashboard() {
       source?.user_id,
       source?.influencer_id,
       source?.email,
+      source?.slug,
+      source?.username,
+      source?.handle,
+      source?.name ? toSlug(String(source.name)) : '',
     ]
       .map((value) => String(value ?? '').replace(/^@/, '').trim().toLowerCase())
       .filter(Boolean);
 
     const uniqueCandidates = Array.from(new Set(candidates));
+    if (uniqueCandidates.length === 0) uniqueCandidates.push('anonymous');
     return uniqueCandidates.map((scope) => `influencer_gallery_images:${scope}`);
   };
 
   const saveGalleryToLocalCache = (images: GalleryImageItem[], profile?: any) => {
-    const keys = getGalleryStorageKeys(profile);
-    if (keys.length === 0) return;
     const payload = JSON.stringify(images);
-    keys.forEach((key) => {
+    getGalleryStorageKeys(profile).forEach((key) => {
       localStorage.setItem(key, payload);
     });
   };
 
   const loadGalleryFromLocalCache = (profile?: any): GalleryImageItem[] => {
     const keys = getGalleryStorageKeys(profile);
-    if (keys.length === 0) return [];
     for (const key of keys) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
@@ -976,13 +983,37 @@ export default function InfluencerDashboard() {
     }
 
     setGalleryImages((prev) => {
-      const remainingSlots = Math.max(0, 5 - prev.length);
+      const remainingSlots = Math.max(0, MAX_GALLERY_IMAGE_COUNT - prev.length);
       if (remainingSlots <= 0) {
-        toast.error('Maximum 5 images allowed');
+        toast.error(`Maximum ${MAX_GALLERY_IMAGE_COUNT} images allowed`);
         return prev;
       }
 
-      const accepted = imageFiles.slice(0, remainingSlots);
+      const oversized = imageFiles.filter((file) => file.size > MAX_GALLERY_IMAGE_SIZE_BYTES);
+      if (oversized.length > 0) {
+        toast.error(`Each image must be 1MB or smaller. Skipped ${oversized.length} file(s).`);
+      }
+
+      const sizeEligible = imageFiles.filter((file) => file.size <= MAX_GALLERY_IMAGE_SIZE_BYTES);
+      const prevTotalBytes = prev
+        .filter((item) => item.file instanceof File)
+        .reduce((sum, item) => sum + ((item.file as File).size || 0), 0);
+
+      const acceptedBySize: File[] = [];
+      let runningBytes = prevTotalBytes;
+      for (const file of sizeEligible) {
+        if (acceptedBySize.length >= remainingSlots) break;
+        if (runningBytes + file.size > MAX_GALLERY_TOTAL_SIZE_BYTES) continue;
+        acceptedBySize.push(file);
+        runningBytes += file.size;
+      }
+
+      if (acceptedBySize.length === 0) {
+        toast.error('Total selected images are too large (max 4MB). Please choose smaller files.');
+        return prev;
+      }
+
+      const accepted = acceptedBySize.slice(0, remainingSlots);
       const nextItems = accepted.map((file, index) => ({
         id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 9)}`,
         file,
@@ -991,7 +1022,9 @@ export default function InfluencerDashboard() {
       }));
 
       if (imageFiles.length > remainingSlots) {
-        toast.error('Only 5 images are allowed');
+        toast.error(`Only ${MAX_GALLERY_IMAGE_COUNT} images are allowed`);
+      } else if (accepted.length < sizeEligible.length) {
+        toast.error('Some files were skipped to keep total upload size under 4MB.');
       }
 
       return [...prev, ...nextItems];
@@ -1034,38 +1067,43 @@ export default function InfluencerDashboard() {
 
     setIsSavingGallery(true);
     try {
-      const localFiles = galleryImages
-        .filter((item) => item.file instanceof File)
-        .map((item) => item.file as File);
-      const filesForValidator = [...localFiles].slice(0, 5);
-      if (filesForValidator.length === 0) {
-        filesForValidator.push(createTinyPngFile());
+      const submitClear = async (withFallbackFile: boolean) => {
+        const payload = new FormData();
+        payload.append('clear_gallery', '1');
+        payload.append('keep_existing', '0');
+        payload.append('existing_gallery', '[]');
+        payload.append('existing_gallery_images', '[]');
+        payload.append('gallery_urls', '[]');
+        if (withFallbackFile) {
+          payload.append('gallery_pic', createTinyPngFile());
+        }
+
+        const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+          body: payload,
+        });
+        const raw = await response.text().catch(() => '');
+        const result = (() => {
+          try {
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return { message: raw };
+          }
+        })();
+        return { response, result };
+      };
+
+      let { response, result } = await submitClear(false);
+      if (!(result?.success || response.ok)) {
+        ({ response, result } = await submitClear(true));
       }
 
-      const payload = new FormData();
-      payload.append('clear_gallery', '1');
-      payload.append('keep_existing', '0');
-      payload.append('existing_gallery', '[]');
-      payload.append('existing_gallery_images', '[]');
-      payload.append('gallery_urls', '[]');
-      filesForValidator.forEach((file) => {
-        payload.append('gallery_pic', file);
-      });
-
-      const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-        body: payload,
-      });
-      const raw = await response.text().catch(() => '');
-      const result = (() => {
-        try {
-          return raw ? JSON.parse(raw) : null;
-        } catch {
-          return { message: raw };
-        }
-      })();
       if (!(result?.success || response.ok)) {
+        if (response.status === 413) {
+          toast.error('Clear request too large for server. Please refresh and try again.');
+          return;
+        }
         toast.error(
           result?.message ||
           result?.error ||
@@ -1150,6 +1188,10 @@ export default function InfluencerDashboard() {
     if (allFilesToUpload.length === 0) {
       const { response, result } = await submitGalleryUpdate([], existingUrls);
       if (!(result?.success || response.ok)) {
+        if (response.status === 413) {
+          toast.error('Upload too large for server. Keep each image under 1MB and total under 4MB.');
+          return;
+        }
         toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
         return;
       }
@@ -1157,6 +1199,10 @@ export default function InfluencerDashboard() {
     } else if (allFilesToUpload.length === 1) {
       const { response, result } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
       if (!(result?.success || response.ok)) {
+        if (response.status === 413) {
+          toast.error('Upload too large for server. Keep each image under 1MB and total under 4MB.');
+          return;
+        }
         toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
         return;
       }
@@ -1169,12 +1215,19 @@ export default function InfluencerDashboard() {
         const batchUrls = extractGalleryImageUrls(batchResult);
         finalServerUrls = Array.from(new Set([...existingUrls, ...batchUrls])).slice(0, 5);
       } else {
+        if (batchResponse.status === 413) {
+          // Backend payload cap is low; fall back to single-file updates.
+        }
         let rollingUrls = [...existingUrls];
         for (const file of allFilesToUpload) {
           await new Promise((resolve) => setTimeout(resolve, 300));
           const { response, result } = await submitGalleryUpdate([file], rollingUrls);
           if (!(result?.success || response.ok)) {
             uploadFailed = true;
+            if (response.status === 413) {
+              toast.error('One of the images is still too large for server (max 1MB each).');
+              break;
+            }
             toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
             break;
           }
