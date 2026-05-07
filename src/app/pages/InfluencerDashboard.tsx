@@ -62,8 +62,39 @@ const isLikelyValidGalleryUrl = (value: string) => {
   if (!raw) return false;
   if (raw === '/' || raw === '#') return false;
   if (raw.toLowerCase().includes('clear-gallery')) return false;
-  return /^https?:\/\//i.test(raw) || raw.startsWith('/');
+  if (/[<>"'`\s]/.test(raw)) return false;
+  if (/^\/?gallery-\d+$/i.test(raw)) return false;
+
+  const hasImageExtension = /\.(avif|webp|png|jpe?g|gif|bmp|svg)(\?.*)?$/i.test(raw);
+  const hasKnownMediaPath =
+    /\/(upload|uploads|storage|media|myapp-images)\//i.test(raw) ||
+    /res\.cloudinary\.com/i.test(raw);
+
+  const looksLikeUrl = /^https?:\/\//i.test(raw) || raw.startsWith('/');
+  return looksLikeUrl && (hasImageExtension || hasKnownMediaPath);
 };
+
+const toAbsoluteGalleryUrl = (value: string) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('//')) return `${window.location.protocol}${raw}`;
+  if (raw.startsWith('/')) {
+    try {
+      const apiOrigin = new URL(API_BASE_URL).origin;
+      return `${apiOrigin}${raw}`;
+    } catch {
+      return `${window.location.origin}${raw}`;
+    }
+  }
+  return raw;
+};
+
+const normalizeGalleryUrl = (value: string) => {
+  const absolute = toAbsoluteGalleryUrl(value);
+  return isLikelyValidGalleryUrl(absolute) ? absolute : '';
+};
+
 
 const PLATFORM_CONFIG = [
   { platformId: 1, name: 'Instagram', icon: Instagram, color: 'from-purple-600 to-pink-600' },
@@ -800,9 +831,12 @@ export default function InfluencerDashboard() {
       cachedUrls.length > galleryUrls.length && isApiSubsetOfCache
         ? cachedUrls
         : galleryUrls;
+    const normalizedSelectedGalleryUrls = Array.from(
+      new Set(selectedGalleryUrls.map((url) => normalizeGalleryUrl(url)).filter(Boolean))
+    ).slice(0, 5);
 
-    if (selectedGalleryUrls.length > 0) {
-      const normalized = selectedGalleryUrls.map((url, index) => ({
+    if (normalizedSelectedGalleryUrls.length > 0) {
+      const normalized = normalizedSelectedGalleryUrls.map((url, index) => ({
         id: `api-${index}-${url.slice(-16)}`,
         preview: url,
         name: `gallery-${index + 1}`,
@@ -891,9 +925,16 @@ export default function InfluencerDashboard() {
           .slice(0, 5)
           .map((item: any, index: number) => ({
             id: String(item.id || `saved-${index}`),
-            preview: String(item.preview),
+            preview: toAbsoluteGalleryUrl(String(item.preview)),
             name: String(item.name || ''),
-          }));
+          }))
+          .filter(
+            (item) =>
+              item.preview &&
+              !item.preview.startsWith('blob:') &&
+              !item.preview.startsWith('data:') &&
+              isLikelyValidGalleryUrl(item.preview)
+          );
         if (loaded.length > 0) return loaded;
       } catch {
         // ignore invalid cache values
@@ -1060,32 +1101,18 @@ export default function InfluencerDashboard() {
 
     setIsSavingGallery(true);
     try {
-      const toAbsoluteGalleryUrl = (value: string) => {
-        const raw = String(value ?? '').trim();
-        if (!raw) return '';
-        if (/^https?:\/\//i.test(raw)) return raw;
-        if (raw.startsWith('//')) return `${window.location.protocol}${raw}`;
-
-        if (raw.startsWith('/')) {
-          try {
-            // Prefer API host for media paths returned by backend.
-            const apiOrigin = new URL(API_BASE_URL).origin;
-            return `${apiOrigin}${raw}`;
-          } catch {
-            return `${window.location.origin}${raw}`;
-          }
-        }
-
-        return raw;
-      };
       const filesToUpload = galleryImages
         .filter((item) => item.file instanceof File)
         .map((item) => item.file as File);
+
       const existingUrls = galleryImages
         .filter((item) => !(item.file instanceof File) && typeof item.preview === 'string' && item.preview.trim())
-        .map((item) => toAbsoluteGalleryUrl(item.preview.trim()))
+        .map((item) => normalizeGalleryUrl(item.preview.trim()))
         .filter(Boolean)
         .filter(isLikelyValidGalleryUrl);
+
+      const newFileItems = galleryImages.filter((item) => item.file instanceof File);
+
       const allFilesToUpload = filesToUpload.slice(0, 5);
       const buildGalleryPayload = (files: File[], urls: string[]) => {
         const payload = new FormData();
@@ -1119,51 +1146,52 @@ export default function InfluencerDashboard() {
         return { response, result };
       };
 
-      let response: Response;
-      let result: any;
-      let finalUrls = [...existingUrls];
+      let finalServerUrls: string[] = [...existingUrls];
+      let uploadFailed = false;
 
-      if (allFilesToUpload.length <= 1) {
-        const single = await submitGalleryUpdate(allFilesToUpload, existingUrls);
-        response = single.response;
-        result = single.result;
-        finalUrls = Array.from(new Set([...existingUrls, ...extractGalleryImageUrls(result)])).slice(0, 5);
+      if (allFilesToUpload.length === 0) {
+        const { response, result } = await submitGalleryUpdate([], existingUrls);
+        if (!(result?.success || response.ok)) {
+          toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+          return;
+        }
+        finalServerUrls = existingUrls;
+      } else if (allFilesToUpload.length === 1) {
+        const { response, result } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
+        if (!(result?.success || response.ok)) {
+          toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+          return;
+        }
+        finalServerUrls = Array.from(
+          new Set([...existingUrls, ...extractGalleryImageUrls(result)])
+        ).slice(0, 5);
       } else {
-        // Upload one-by-one for backend compatibility (many APIs accept one multipart file per request).
-        let rollingUrls = [...existingUrls];
-        let failedStep: { response: Response; result: any } | null = null;
-
-        for (const file of allFilesToUpload) {
-          const step = await submitGalleryUpdate([file], rollingUrls);
-          const stepSucceeded = step.result?.success || step.response.ok;
-          if (!stepSucceeded) {
-            failedStep = step;
-            break;
-          }
-
-          const stepUrls = extractGalleryImageUrls(step.result);
-          if (stepUrls.length > 0) {
-            rollingUrls = Array.from(new Set([...rollingUrls, ...stepUrls])).slice(0, 5);
-          }
-        }
-
-        if (failedStep) {
-          response = failedStep.response;
-          result = failedStep.result;
+        // Try uploading all files in one request first
+        const { response: batchResponse, result: batchResult } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
+        if (batchResult?.success || batchResponse.ok) {
+          const batchUrls = extractGalleryImageUrls(batchResult);
+          finalServerUrls = Array.from(new Set([...existingUrls, ...batchUrls])).slice(0, 5);
         } else {
-          response = new Response(null, { status: 200 });
-          result = { success: true };
-          finalUrls = rollingUrls;
+          // Fallback: upload one by one
+          let rollingUrls = [...existingUrls];
+          for (const file of allFilesToUpload) {
+            const { response, result } = await submitGalleryUpdate([file], rollingUrls);
+            if (!(result?.success || response.ok)) {
+              uploadFailed = true;
+              toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+              break;
+            }
+            const stepUrls = extractGalleryImageUrls(result);
+            if (stepUrls.length > 0) {
+              rollingUrls = Array.from(new Set([...rollingUrls, ...stepUrls])).slice(0, 5);
+            }
+          }
+          if (!uploadFailed) {
+            finalServerUrls = rollingUrls;
+          } else {
+            return;
+          }
         }
-      }
-
-      if (!(result?.success || response.ok)) {
-        toast.error(
-          result?.message ||
-          result?.error ||
-          `Failed to save gallery images (${response.status})`
-        );
-        return;
       }
 
       if (galleryImages.length === 0) {
@@ -1176,19 +1204,37 @@ export default function InfluencerDashboard() {
         return;
       }
 
-      const retainedUrls = galleryImages
-        .filter((item) => !item.file && item.preview)
-        .map((item) => item.preview);
-      const mergedUrls = Array.from(new Set([...retainedUrls, ...finalUrls])).slice(0, 5);
+     // Keep existing stable URLs + merge any new server-returned URLs
+      const existingStableUrls = galleryImages
+        .filter((item) => !(item.file instanceof File))
+        .map((item) => normalizeGalleryUrl(item.preview))
+        .filter(Boolean);
+
+      const serverNormalized = finalServerUrls
+        .map((url) => normalizeGalleryUrl(url))
+        .filter(Boolean);
+
+      const mergedUrls = Array.from(
+        new Set([...existingStableUrls, ...serverNormalized])
+      ).slice(0, 5);
+
+      // If server returned no URLs but we had new files, keep showing blob previews
+      // and warn the user — don't wipe out what they see
+      if (mergedUrls.length === 0 && newFileItems.length > 0) {
+        toast.error('Upload succeeded but server returned no image URLs. Please retry.');
+        return;
+      }
+
+      // Only revoke blob URLs AFTER we have stable URLs confirmed
+      newFileItems.forEach((item) => {
+        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+      });
+
       const normalized = mergedUrls.map((url, index) => ({
         id: `api-${index}-${url.slice(-16)}`,
         preview: url,
         name: `gallery-${index + 1}`,
       }));
-
-      galleryImages.forEach((item) => {
-        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
-      });
 
       setGalleryImages(normalized);
       setHasSavedGallery(true);
@@ -1213,18 +1259,13 @@ export default function InfluencerDashboard() {
     try {
       const loaded = loadGalleryFromLocalCache(userData);
       if (loaded.length === 0) {
-        setGalleryImages([]);
-        setHasSavedGallery(false);
-        setIsGalleryDirty(false);
         return;
       }
-      setGalleryImages(loaded);
-      setHasSavedGallery(loaded.length > 0);
+      setGalleryImages((prev) => (prev.length > 0 ? prev : loaded));
+      setHasSavedGallery(true);
       setIsGalleryDirty(false);
     } catch {
-      setGalleryImages([]);
-      setHasSavedGallery(false);
-      setIsGalleryDirty(false);
+      // ignore invalid cache hydration
     }
   }, [userData]);
 
@@ -2398,7 +2439,17 @@ export default function InfluencerDashboard() {
                       <div className="grid grid-cols-3 gap-2 mt-3">
                         {galleryImages.map((image) => (
                           <div key={image.id} className="relative rounded-lg overflow-hidden border border-gray-700">
-                            <img src={image.preview} alt={image.name || image.file?.name || 'Gallery image'} className="w-full h-20 object-cover" />
+                            <img
+                              src={image.preview}
+                              alt={image.name || image.file?.name || 'Gallery image'}
+                              className="w-full h-20 object-cover"
+                              onError={() => {
+                                // Auto-clean invalid persisted URLs so broken slots don't linger.
+                                if (!image.preview.startsWith('blob:')) {
+                                  removeGalleryImage(image.id);
+                                }
+                              }}
+                            />
                             <button
                               type="button"
                               onClick={(e) => {

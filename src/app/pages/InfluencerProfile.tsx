@@ -610,10 +610,38 @@ function extractCategoryNamesFromProfileRow(
 
 function extractGalleryFromApi(row: Record<string, unknown>): string[] {
   const urls = new Set<string>();
+  const isLikelyValidGalleryUrl = (value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw || raw === '/' || raw === '#') return false;
+    if (/[<>"'`\s]/.test(raw)) return false;
+    if (/^\/?gallery-\d+$/i.test(raw)) return false;
+    const hasImageExtension = /\.(avif|webp|png|jpe?g|gif|bmp|svg)(\?.*)?$/i.test(raw);
+    const hasKnownMediaPath =
+      /\/(upload|uploads|storage|media|myapp-images)\//i.test(raw) ||
+      /res\.cloudinary\.com/i.test(raw);
+    const looksLikeUrl = /^https?:\/\//i.test(raw) || raw.startsWith('/');
+    return looksLikeUrl && (hasImageExtension || hasKnownMediaPath);
+  };
+  const toAbsoluteGalleryUrl = (value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.startsWith('//')) return `${window.location.protocol}${raw}`;
+    if (raw.startsWith('/')) {
+      try {
+        const apiOrigin = new URL(API_BASE_URL).origin;
+        return `${apiOrigin}${raw}`;
+      } catch {
+        return `${window.location.origin}${raw}`;
+      }
+    }
+    return raw;
+  };
   const push = (value: unknown) => {
     const text = String(value ?? '').trim();
     if (!text) return;
-    if (/^https?:\/\//i.test(text) || text.startsWith('/')) urls.add(text);
+    const absolute = toAbsoluteGalleryUrl(text);
+    if (isLikelyValidGalleryUrl(absolute)) urls.add(absolute);
   };
 
   const consume = (value: unknown) => {
@@ -712,6 +740,21 @@ function getGalleryStorageKeysForProfile(source: Record<string, unknown> | null 
 }
 
 function loadCachedGalleryForProfile(source: Record<string, unknown> | null | undefined): string[] {
+  const toAbsoluteGalleryUrl = (value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.startsWith('//')) return `${window.location.protocol}${raw}`;
+    if (raw.startsWith('/')) {
+      try {
+        const apiOrigin = new URL(API_BASE_URL).origin;
+        return `${apiOrigin}${raw}`;
+      } catch {
+        return `${window.location.origin}${raw}`;
+      }
+    }
+    return raw;
+  };
   const keys = getGalleryStorageKeysForProfile(source);
   for (const key of keys) {
     const raw = localStorage.getItem(key);
@@ -726,7 +769,13 @@ function loadCachedGalleryForProfile(source: Record<string, unknown> | null | un
           }
           return '';
         })
-        .filter((url: string) => /^https?:\/\//i.test(url) || url.startsWith('/'));
+        .map((url: string) => toAbsoluteGalleryUrl(url))
+        .filter(
+          (url: string) =>
+            (/^https?:\/\//i.test(url) || url.startsWith('/')) &&
+            !url.startsWith('blob:') &&
+            !url.startsWith('data:')
+        );
       if (urls.length > 0) return Array.from(new Set(urls)).slice(0, 10);
     } catch {
       // ignore bad cache
@@ -1684,8 +1733,8 @@ export function InfluencerProfile() {
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     {profilePlatformBadges.map((platform) => (
                       <Badge key={platform.key} className={`${platform.className} text-xs`}>
-                        <platform.Icon className="w-3 h-3 mr-1" />
-                        {platform.label} {formatFollowers(platform.followers)} Followers
+                       <platform.Icon className="w-3 h-3 mr-1" />
+                       {formatFollowers(platform.followers)} Followers
                       </Badge>
                     ))}
                   </div>
@@ -2065,7 +2114,7 @@ export function InfluencerProfile() {
                                 <div className="rounded-2xl border border-gray-300 px-3 py-2.5">
                                   <div className="text-xs text-gray-600 leading-none mb-1.5">Followers</div>
                                   <div className="text-[13px] font-medium text-gray-900 leading-none">
-                                    {formatFollowers((inf.platforms?.instagram || inf.platforms?.youtube || inf.platforms?.tiktok || inf.platforms?.facebook || 0))}
+                                    {formatFollowers((inf.platforms?.instagram || inf.platforms?.youtube || inf.platforms?.tiktok || 0))}
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-gray-300 px-3 py-2.5">
