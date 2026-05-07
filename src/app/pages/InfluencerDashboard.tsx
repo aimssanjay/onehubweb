@@ -891,28 +891,26 @@ export default function InfluencerDashboard() {
       source?.user_id,
       source?.influencer_id,
       source?.email,
-      source?.slug,
-      source?.username,
-      source?.handle,
-      source?.name ? toSlug(String(source.name)) : '',
     ]
       .map((value) => String(value ?? '').replace(/^@/, '').trim().toLowerCase())
       .filter(Boolean);
 
     const uniqueCandidates = Array.from(new Set(candidates));
-    if (uniqueCandidates.length === 0) uniqueCandidates.push('anonymous');
     return uniqueCandidates.map((scope) => `influencer_gallery_images:${scope}`);
   };
 
   const saveGalleryToLocalCache = (images: GalleryImageItem[], profile?: any) => {
+    const keys = getGalleryStorageKeys(profile);
+    if (keys.length === 0) return;
     const payload = JSON.stringify(images);
-    getGalleryStorageKeys(profile).forEach((key) => {
+    keys.forEach((key) => {
       localStorage.setItem(key, payload);
     });
   };
 
   const loadGalleryFromLocalCache = (profile?: any): GalleryImageItem[] => {
     const keys = getGalleryStorageKeys(profile);
+    if (keys.length === 0) return [];
     for (const key of keys) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;

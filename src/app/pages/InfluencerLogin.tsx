@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { clearInfluencerClientData } from '../utils/influencerStorage';
 
 export default function InfluencerLogin() {
   const navigate = useNavigate();
@@ -39,6 +40,9 @@ const handleLogin = async (e: React.FormEvent) => {
         alert("Login successful but token missing. Check console.");
         return;
       }
+
+      // Always reset previous influencer-scoped client cache before setting the new session.
+      clearInfluencerClientData();
 
       // ✅ Save with correct key names
       localStorage.setItem("influencer_token", token);

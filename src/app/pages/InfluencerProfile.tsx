@@ -705,33 +705,12 @@ function extractGalleryFromApi(row: Record<string, unknown>): string[] {
 
 function getGalleryStorageKeysForProfile(source: Record<string, unknown> | null | undefined): string[] {
   if (!source) return [];
-  const userRaw = localStorage.getItem('influencer_user');
-  const cachedUser = (() => {
-    if (!userRaw) return null;
-    try {
-      return JSON.parse(userRaw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  })();
 
   const candidates = [
     source.id,
     source.user_id,
     source.influencer_id,
     source.email,
-    source.slug,
-    source.username,
-    source.handle,
-    source.name ? toSlug(String(source.name)) : '',
-    cachedUser?.id,
-    cachedUser?.user_id,
-    cachedUser?.influencer_id,
-    cachedUser?.email,
-    cachedUser?.slug,
-    cachedUser?.username,
-    cachedUser?.handle,
-    cachedUser?.name ? toSlug(String(cachedUser.name)) : '',
   ]
     .map((value) => String(value ?? '').replace(/^@/, '').trim().toLowerCase())
     .filter(Boolean);
@@ -2274,6 +2253,5 @@ export function InfluencerProfile() {
     </div>
   );
 }
-
 
 

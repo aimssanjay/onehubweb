@@ -50,11 +50,11 @@ export function clearInfluencerClientData() {
     if (!key) continue;
     if (
       key.startsWith(`${LEGACY_ANALYTICS_KEY}:`) ||
-      key.startsWith(`${LEGACY_ANALYTICS_SAVED_KEY}:`)
+      key.startsWith(`${LEGACY_ANALYTICS_SAVED_KEY}:`) ||
+      key.startsWith('influencer_gallery_images:')
     ) {
       keysToRemove.push(key);
     }
   }
   keysToRemove.forEach((key) => localStorage.removeItem(key));
 }
-
