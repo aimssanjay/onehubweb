@@ -1093,162 +1093,156 @@ export default function InfluencerDashboard() {
   };
 
   const handleSaveGallery = async () => {
-    const token = localStorage.getItem('influencer_token');
-    if (!token) {
-      toast.error('Please login again');
+  const token = localStorage.getItem('influencer_token');
+  if (!token) {
+    toast.error('Please login again');
+    return;
+  }
+
+  setIsSavingGallery(true);
+  try {
+    const filesToUpload = galleryImages
+      .filter((item) => item.file instanceof File)
+      .map((item) => item.file as File);
+
+    const existingUrls = galleryImages
+      .filter((item) => !(item.file instanceof File) && typeof item.preview === 'string' && item.preview.trim())
+      .map((item) => normalizeGalleryUrl(item.preview.trim()))
+      .filter(Boolean)
+      .filter(isLikelyValidGalleryUrl);
+
+    const newFileItems = galleryImages.filter((item) => item.file instanceof File);
+    const allFilesToUpload = filesToUpload.slice(0, 5);
+
+    const buildGalleryPayload = (files: File[], urls: string[]) => {
+      const payload = new FormData();
+      payload.append('clear_gallery', galleryImages.length === 0 ? '1' : '0');
+      payload.append('keep_existing', galleryImages.length > 0 ? '1' : '0');
+      payload.append('existing_gallery', JSON.stringify(urls));
+      payload.append('existing_gallery_images', JSON.stringify(urls));
+      payload.append('gallery_urls', JSON.stringify(urls));
+      files.forEach((file) => {
+        payload.append('gallery_pic', file);
+      });
+      return payload;
+    };
+
+    const submitGalleryUpdate = async (files: File[], urls: string[]) => {
+      const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: buildGalleryPayload(files, urls),
+      });
+      const raw = await response.text().catch(() => '');
+      const result = (() => {
+        try {
+          return raw ? JSON.parse(raw) : {};
+        } catch {
+          return { message: raw };
+        }
+      })();
+      return { response, result };
+    };
+
+    let finalServerUrls: string[] = [...existingUrls];
+    let uploadFailed = false;
+
+    if (allFilesToUpload.length === 0) {
+      const { response, result } = await submitGalleryUpdate([], existingUrls);
+      if (!(result?.success || response.ok)) {
+        toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+        return;
+      }
+      finalServerUrls = existingUrls;
+    } else if (allFilesToUpload.length === 1) {
+      const { response, result } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
+      if (!(result?.success || response.ok)) {
+        toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+        return;
+      }
+      finalServerUrls = Array.from(
+        new Set([...existingUrls, ...extractGalleryImageUrls(result)])
+      ).slice(0, 5);
+    } else {
+      const { response: batchResponse, result: batchResult } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
+      if (batchResult?.success || batchResponse.ok) {
+        const batchUrls = extractGalleryImageUrls(batchResult);
+        finalServerUrls = Array.from(new Set([...existingUrls, ...batchUrls])).slice(0, 5);
+      } else {
+        let rollingUrls = [...existingUrls];
+        for (const file of allFilesToUpload) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          const { response, result } = await submitGalleryUpdate([file], rollingUrls);
+          if (!(result?.success || response.ok)) {
+            uploadFailed = true;
+            toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
+            break;
+          }
+          const stepUrls = extractGalleryImageUrls(result);
+          if (stepUrls.length > 0) {
+            rollingUrls = Array.from(new Set([...rollingUrls, ...stepUrls])).slice(0, 5);
+          }
+        }
+        if (!uploadFailed) {
+          finalServerUrls = rollingUrls;
+        } else {
+          return;
+        }
+      }
+    }
+
+    if (galleryImages.length === 0) {
+      setGalleryImages([]);
+      setHasSavedGallery(false);
+      setIsGalleryDirty(false);
+      saveGalleryToLocalCache([]);
+      window.dispatchEvent(new Event('influencer-profile-updated'));
+      toast.success('Gallery images updated');
       return;
     }
 
-    setIsSavingGallery(true);
-    try {
-      const filesToUpload = galleryImages
-        .filter((item) => item.file instanceof File)
-        .map((item) => item.file as File);
+    const existingStableUrls = galleryImages
+      .filter((item) => !(item.file instanceof File))
+      .map((item) => normalizeGalleryUrl(item.preview))
+      .filter(Boolean);
 
-      const existingUrls = galleryImages
-        .filter((item) => !(item.file instanceof File) && typeof item.preview === 'string' && item.preview.trim())
-        .map((item) => normalizeGalleryUrl(item.preview.trim()))
-        .filter(Boolean)
-        .filter(isLikelyValidGalleryUrl);
+    const serverNormalized = finalServerUrls
+      .map((url) => normalizeGalleryUrl(url))
+      .filter(Boolean);
 
-      const newFileItems = galleryImages.filter((item) => item.file instanceof File);
+    const mergedUrls = Array.from(
+      new Set([...existingStableUrls, ...serverNormalized])
+    ).slice(0, 5);
 
-      const allFilesToUpload = filesToUpload.slice(0, 5);
-      const buildGalleryPayload = (files: File[], urls: string[]) => {
-        const payload = new FormData();
-        payload.append('clear_gallery', galleryImages.length === 0 ? '1' : '0');
-        payload.append('keep_existing', galleryImages.length > 0 ? '1' : '0');
-        payload.append('existing_gallery', JSON.stringify(urls));
-        payload.append('existing_gallery_images', JSON.stringify(urls));
-        payload.append('gallery_urls', JSON.stringify(urls));
-        files.forEach((file) => {
-          payload.append('gallery_pic', file);
-        });
-        return payload;
-      };
-
-      const submitGalleryUpdate = async (files: File[], urls: string[]) => {
-        const response = await fetch(`${API_BASE_URL}/influencers/update-gallery`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: buildGalleryPayload(files, urls),
-        });
-        const raw = await response.text().catch(() => '');
-        const result = (() => {
-          try {
-            return raw ? JSON.parse(raw) : {};
-          } catch {
-            return { message: raw };
-          }
-        })();
-        return { response, result };
-      };
-
-      let finalServerUrls: string[] = [...existingUrls];
-      let uploadFailed = false;
-
-      if (allFilesToUpload.length === 0) {
-        const { response, result } = await submitGalleryUpdate([], existingUrls);
-        if (!(result?.success || response.ok)) {
-          toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
-          return;
-        }
-        finalServerUrls = existingUrls;
-      } else if (allFilesToUpload.length === 1) {
-        const { response, result } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
-        if (!(result?.success || response.ok)) {
-          toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
-          return;
-        }
-        finalServerUrls = Array.from(
-          new Set([...existingUrls, ...extractGalleryImageUrls(result)])
-        ).slice(0, 5);
-      } else {
-        // Try uploading all files in one request first
-        const { response: batchResponse, result: batchResult } = await submitGalleryUpdate(allFilesToUpload, existingUrls);
-        if (batchResult?.success || batchResponse.ok) {
-          const batchUrls = extractGalleryImageUrls(batchResult);
-          finalServerUrls = Array.from(new Set([...existingUrls, ...batchUrls])).slice(0, 5);
-        } else {
-          // Fallback: upload one by one
-          let rollingUrls = [...existingUrls];
-          for (const file of allFilesToUpload) {
-            const { response, result } = await submitGalleryUpdate([file], rollingUrls);
-            if (!(result?.success || response.ok)) {
-              uploadFailed = true;
-              toast.error(result?.message || result?.error || `Failed to save gallery (${response.status})`);
-              break;
-            }
-            const stepUrls = extractGalleryImageUrls(result);
-            if (stepUrls.length > 0) {
-              rollingUrls = Array.from(new Set([...rollingUrls, ...stepUrls])).slice(0, 5);
-            }
-          }
-          if (!uploadFailed) {
-            finalServerUrls = rollingUrls;
-          } else {
-            return;
-          }
-        }
-      }
-
-      if (galleryImages.length === 0) {
-        setGalleryImages([]);
-        setHasSavedGallery(false);
-        setIsGalleryDirty(false);
-        saveGalleryToLocalCache([]);
-        window.dispatchEvent(new Event('influencer-profile-updated'));
-        toast.success('Gallery images updated');
-        return;
-      }
-
-     // Keep existing stable URLs + merge any new server-returned URLs
-      const existingStableUrls = galleryImages
-        .filter((item) => !(item.file instanceof File))
-        .map((item) => normalizeGalleryUrl(item.preview))
-        .filter(Boolean);
-
-      const serverNormalized = finalServerUrls
-        .map((url) => normalizeGalleryUrl(url))
-        .filter(Boolean);
-
-      const mergedUrls = Array.from(
-        new Set([...existingStableUrls, ...serverNormalized])
-      ).slice(0, 5);
-
-      // If server returned no URLs but we had new files, keep showing blob previews
-      // and warn the user — don't wipe out what they see
-      if (mergedUrls.length === 0 && newFileItems.length > 0) {
-        toast.error('Upload succeeded but server returned no image URLs. Please retry.');
-        return;
-      }
-
-      // Only revoke blob URLs AFTER we have stable URLs confirmed
-      newFileItems.forEach((item) => {
-        if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
-      });
-
-      const normalized = mergedUrls.map((url, index) => ({
-        id: `api-${index}-${url.slice(-16)}`,
-        preview: url,
-        name: `gallery-${index + 1}`,
-      }));
-
-      setGalleryImages(normalized);
-      setHasSavedGallery(true);
-      setIsGalleryDirty(false);
-
-      saveGalleryToLocalCache(normalized);
-      window.dispatchEvent(new Event('influencer-profile-updated'));
-      toast.success(hasSavedGallery ? 'Gallery images updated' : 'Gallery images saved');
-    } catch {
-      toast.error('Failed to save gallery images');
-    } finally {
-      setIsSavingGallery(false);
+    if (mergedUrls.length === 0 && newFileItems.length > 0) {
+      toast.error('Upload succeeded but server returned no image URLs. Please retry.');
+      return;
     }
-  };
+
+    newFileItems.forEach((item) => {
+      if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+    });
+
+    const normalized = mergedUrls.map((url, index) => ({
+      id: `api-${index}-${url.slice(-16)}`,
+      preview: url,
+      name: `gallery-${index + 1}`,
+    }));
+
+    setGalleryImages(normalized);
+    setHasSavedGallery(true);
+    setIsGalleryDirty(false);
+    saveGalleryToLocalCache(normalized);
+    window.dispatchEvent(new Event('influencer-profile-updated'));
+    toast.success(hasSavedGallery ? 'Gallery images updated' : 'Gallery images saved');
+  } catch {
+    toast.error('Failed to save gallery images');
+  } finally {
+    setIsSavingGallery(false);
+  }
+};
 
   useEffect(() => {
     galleryImagesRef.current = galleryImages;
