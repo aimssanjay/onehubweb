@@ -8,6 +8,14 @@ import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
+
+const isEmail = (value: string) => EMAIL_REGEX.test(value.trim());
+const isPhone = (value: string) => PHONE_REGEX.test(value.trim());
+const normalizePhone = (value: string) => value.replace(/\D/g, '');
+const phoneToPseudoEmail = (phone: string) => `${normalizePhone(phone)}@phone.onehub.local`;
+
 const platformMeta: Record<string, { icon: React.ComponentType<any>; placeholder: string; color: string }> = {
   Instagram: { icon: Instagram, placeholder: 'https://instagram.com/yourusername', color: 'from-purple-600 to-pink-600' },
   YouTube: { icon: Youtube, placeholder: 'https://youtube.com/channel/yourchannelname', color: 'from-red-600 to-red-500' },
@@ -40,7 +48,7 @@ export function InfluencerSignup() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '',
+    loginId: '',
     password: '',
     confirmPassword: '',
   });
@@ -59,17 +67,35 @@ export function InfluencerSignup() {
 
    // ── STEP 1: Register and save token ──
   const handleRegister = async () => {
+    const loginId = formData.loginId.trim();
+    const loginIsEmail = isEmail(loginId);
+    const loginIsPhone = isPhone(loginId);
+
+    if (!loginIsEmail && !loginIsPhone) {
+      alert('Please enter a valid email address or phone number');
+      return;
+    }
+
     setLoading(true);
     try {
+      const payload: Record<string, unknown> = {
+        name: formData.fullName,
+        password: formData.password,
+        user_type_id: 3,
+      };
+
+      if (loginIsEmail) {
+        payload.email = loginId;
+      } else {
+        payload.phone = loginId;
+        // Backend currently requires email for registration.
+        payload.email = phoneToPseudoEmail(loginId);
+      }
+
       const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REGISTER}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.fullName,
-          email: formData.email,
-          password: formData.password,
-          user_type_id: 3,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       console.log('Register Response:', data);
@@ -227,12 +253,12 @@ export function InfluencerSignup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-white mb-2">Email Address or Phone Number</label>
                 <Input
-                  type="email"
-                  placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="text"
+                  placeholder="you@example.com or +91 9876543210"
+                  value={formData.loginId}
+                  onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
                   className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
                 />
               </div>
@@ -278,7 +304,7 @@ export function InfluencerSignup() {
               </div>
               <Button
                 onClick={handleRegister}
-                disabled={loading || !formData.fullName || !formData.email || !formData.password || formData.password !== formData.confirmPassword}
+                disabled={loading || !formData.fullName || !formData.loginId || !formData.password || formData.password !== formData.confirmPassword}
                 className="w-full bg-primary hover:bg-secondary text-white gap-2"
               >
                 {loading ? 'Creating Account...' : 'Continue'}

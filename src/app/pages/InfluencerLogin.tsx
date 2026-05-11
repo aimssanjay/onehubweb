@@ -2,28 +2,51 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, User } from 'lucide-react';
 import { clearInfluencerClientData } from '../utils/influencerStorage';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
+
+const isEmail = (value: string) => EMAIL_REGEX.test(value.trim());
+const isPhone = (value: string) => PHONE_REGEX.test(value.trim());
+const normalizePhone = (value: string) => value.replace(/\D/g, '');
+const phoneToPseudoEmail = (phone: string) => `${normalizePhone(phone)}@phone.onehub.local`;
 
 export default function InfluencerLogin() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    email: '',
+    loginId: '',
     password: '',
   });
 
 const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
+  const loginId = formData.loginId.trim();
+  const password = formData.password.trim();
+  const loginIsEmail = isEmail(loginId);
+  const loginIsPhone = isPhone(loginId);
+
+  if (!loginIsEmail && !loginIsPhone) {
+    alert("Please enter a valid email or phone number");
+    return;
+  }
 
   try {
+    const payload: Record<string, string> = { password };
+    if (loginIsEmail) {
+      payload.email = loginId;
+    } else {
+      // Backend login currently expects email/password.
+      payload.email = phoneToPseudoEmail(loginId);
+      payload.phone = loginId;
+    }
+
     const response = await fetch("https://api.onehub.ae/api/users/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: formData.email.trim(),
-        password: formData.password.trim(),
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
@@ -52,7 +75,7 @@ const handleLogin = async (e: React.FormEvent) => {
       return;
     }
 
-    alert(data?.message || "Invalid email or password");
+    alert(data?.message || "Invalid email/phone or password");
 
   } catch (error) {
     console.error("Login Error:", error);
@@ -72,15 +95,15 @@ const handleLogin = async (e: React.FormEvent) => {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-white mb-2">
-                Email Address
+                Email Address or Phone Number
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <Input
-                  type="email"
-                  placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="text"
+                  placeholder="you@example.com or +91 9876543210"
+                  value={formData.loginId}
+                  onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
                   className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pl-10"
                   required
                 />
