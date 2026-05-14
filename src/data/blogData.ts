@@ -242,7 +242,7 @@ export const blogPosts: BlogPost[] = [
       "Social Media Influencer Agency Dubai",
       "social media marketing agency Dubai"
     ],
-    "featuredImage": "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200",
+    "featuredImage": "src/assets/blog/Premier-Influencer-Marketing-Agency-in-Dubai.jpg",
     "metaTitle": "Local Insights: Why Global Brands Choose a Social Media Agency in Dubai for Middle East Expansion | One Hub Blog",
     "metaDescription": "The Middle East, specifically the UAE, is no longer just a luxury travel destination; it is a global powerhouse for digital commerce. For international bra"
   },
@@ -277,7 +277,7 @@ export const blogPosts: BlogPost[] = [
       "brand collaboration agency Dubai",
       "top social media agencies Dubai"
     ],
-    "featuredImage": "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200",
+    "featuredImage": "src/assets/blog//Influencer-Platform.jpg",
     "metaTitle": "Your Growth Partner: Social Media Agency in Dubai for High-Impact Campaigns | One Hub Blog",
     "metaDescription": "In today’s fast-moving UAE market, brands need more than visibility - they need strategy, precision, and measurable growth. At One Hub, we position ourselv"
   },

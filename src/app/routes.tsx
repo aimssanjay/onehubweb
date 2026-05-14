@@ -31,6 +31,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Homepage /> },
       { path: 'browse', element: <InfluencerListing /> },
       { path: 'influencer/:id', element: <InfluencerProfile /> },
+      // Backward-compatible legacy URL from old indexed links
+      { path: 'influencers/:id', element: <InfluencerProfile /> },
       { path: 'profile/:id', element: <InfluencerProfile /> },
       { path: 'login', element: <Login /> },
       { path: 'signup', element: <BrandSignup /> },
