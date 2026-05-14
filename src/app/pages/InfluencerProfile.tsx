@@ -637,10 +637,39 @@ function extractGalleryFromApi(row: Record<string, unknown>): string[] {
     }
     return raw;
   };
+  const stripTemporaryGalleryUrlParams = (value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (!/^https?:\/\//i.test(raw)) return raw;
+    try {
+      const url = new URL(raw);
+      const temporaryParamKeys = [
+        'x-amz-algorithm',
+        'x-amz-credential',
+        'x-amz-date',
+        'x-amz-expires',
+        'x-amz-security-token',
+        'x-amz-signature',
+        'expires',
+        'signature',
+        'sig',
+        'token',
+        'auth',
+      ];
+      const lowerKeys = Array.from(url.searchParams.keys()).map((key) => key.toLowerCase());
+      const hasTemporaryParams = lowerKeys.some((key) => temporaryParamKeys.includes(key));
+      if (!hasTemporaryParams) return raw;
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  };
   const push = (value: unknown) => {
     const text = String(value ?? '').trim();
     if (!text) return;
-    const absolute = toAbsoluteGalleryUrl(text);
+    const absolute = stripTemporaryGalleryUrlParams(toAbsoluteGalleryUrl(text));
     if (isLikelyValidGalleryUrl(absolute)) urls.add(absolute);
   };
 
@@ -734,6 +763,35 @@ function loadCachedGalleryForProfile(source: Record<string, unknown> | null | un
     }
     return raw;
   };
+  const stripTemporaryGalleryUrlParams = (value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (!/^https?:\/\//i.test(raw)) return raw;
+    try {
+      const url = new URL(raw);
+      const temporaryParamKeys = [
+        'x-amz-algorithm',
+        'x-amz-credential',
+        'x-amz-date',
+        'x-amz-expires',
+        'x-amz-security-token',
+        'x-amz-signature',
+        'expires',
+        'signature',
+        'sig',
+        'token',
+        'auth',
+      ];
+      const lowerKeys = Array.from(url.searchParams.keys()).map((key) => key.toLowerCase());
+      const hasTemporaryParams = lowerKeys.some((key) => temporaryParamKeys.includes(key));
+      if (!hasTemporaryParams) return raw;
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  };
   const keys = getGalleryStorageKeysForProfile(source);
   for (const key of keys) {
     const raw = localStorage.getItem(key);
@@ -748,7 +806,7 @@ function loadCachedGalleryForProfile(source: Record<string, unknown> | null | un
           }
           return '';
         })
-        .map((url: string) => toAbsoluteGalleryUrl(url))
+        .map((url: string) => stripTemporaryGalleryUrlParams(toAbsoluteGalleryUrl(url)))
         .filter(
           (url: string) =>
             (/^https?:\/\//i.test(url) || url.startsWith('/')) &&
@@ -2253,5 +2311,4 @@ export function InfluencerProfile() {
     </div>
   );
 }
-
 

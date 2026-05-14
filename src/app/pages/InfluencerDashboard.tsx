@@ -95,8 +95,39 @@ const toAbsoluteGalleryUrl = (value: string) => {
   return raw;
 };
 
+const stripTemporaryGalleryUrlParams = (value: string) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (!/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const url = new URL(raw);
+    const temporaryParamKeys = [
+      'x-amz-algorithm',
+      'x-amz-credential',
+      'x-amz-date',
+      'x-amz-expires',
+      'x-amz-security-token',
+      'x-amz-signature',
+      'expires',
+      'signature',
+      'sig',
+      'token',
+      'auth',
+    ];
+    const lowerKeys = Array.from(url.searchParams.keys()).map((key) => key.toLowerCase());
+    const hasTemporaryParams = lowerKeys.some((key) => temporaryParamKeys.includes(key));
+    if (!hasTemporaryParams) return raw;
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return raw;
+  }
+};
+
 const normalizeGalleryUrl = (value: string) => {
-  const absolute = toAbsoluteGalleryUrl(value);
+  const absolute = stripTemporaryGalleryUrlParams(toAbsoluteGalleryUrl(value));
   return isLikelyValidGalleryUrl(absolute) ? absolute : '';
 };
 
