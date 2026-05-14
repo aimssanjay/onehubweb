@@ -715,13 +715,12 @@ export function Homepage() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/78" />
         <div className="relative max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           <div className="text-white relative z-20 text-center lg:text-left">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 md:mb-6 leading-tight">
-              Best <span className="text-primary">Influencer Marketing</span><br />
-              Agency in UAE
+            <h1 className="text-3xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6 leading-tight">
+              Best Influencer Marketing Agency <span className="text-primary">Marketing Agency</span><br />
+              in UAE | Empower Your Brand with One Hub
             </h1>
             <p className="text-white/85 text-base md:text-xl leading-relaxed mb-6 md:mb-8 max-w-2xl mx-auto lg:mx-0">
-              One Hub is the #1 influencer marketing platform in UAE helping brands collaborate with
-              top creators and drive high-impact campaigns across social media.
+             Welcome to One Hub! We are a leading influencer marketing agency in the UAE, connecting brands with 330,000+ verified creators across Instagram, TikTok, and YouTube to deliver impactful campaigns, authentic engagement, measurable growth, and sales. 
             </p>
 
             <div className="mb-6 sm:mb-8 md:mb-10">
@@ -841,9 +840,9 @@ export function Homepage() {
         <div className="max-w-[1350px] mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">Featured Influencers</h2>
-              <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Hire top influencers across all platforms</p>
-            </div>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">Work With Featured Influencers in UAE</h2>
+              <p className="text-muted-foreground text-sm md-4:text-base lg:text-lg">Hire Top Influencers: Partner with the Best Influencer Marketing Agency in UAE</p>
+                       </div>
             <Button
               variant="ghost"
               onClick={() => onNavigate('browse')}
@@ -871,13 +870,11 @@ export function Homepage() {
                 className="mb-4 md:mb-6 text-sm px-5 py-2 rounded-md font-semibold inline-block"
                 style={{ backgroundColor: '#E91E63', color: '#FFFFFF', border: 'none' }}
               >
-                Search
+                Search 
               </Badge>
               
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-black mb-8 md:mb-12 leading-tight">
-                Find and Hire Influencers in Seconds on the Marketplace
-              </h2>
-
+                Find & Hire Creators With the Best Influencer Marketing Agency in UAE </h2>
               {/* Steps */}
               <div className="space-y-6 md:space-y-8">
                 <div>
@@ -885,25 +882,33 @@ export function Homepage() {
                     Search Influencers
                   </h3>
                   <p className="text-gray-600 text-sm md:text-base leading-relaxed">
-                    Search thousands of vetted Instagram, TikTok, and YouTube influencers.
+                    Discover verified Instagram, TikTok, and YouTube influencers across every niche and category.
                   </p>
                 </div>
 
                 <div>
                   <h3 className="text-lg md:text-xl font-bold text-black mb-2">
-                    Purchase & Chat Securely
+                    Connect & Collaborate
                   </h3>
                   <p className="text-gray-600 text-sm md:text-base leading-relaxed">
-                    Safely purchase and communicate through Collabstr. We hold your payment until the work is completed.
+                  Chat directly with creators, manage campaigns securely, and streamline influencer partnerships.
                   </p>
                 </div>
 
                 <div>
                   <h3 className="text-lg md:text-xl font-bold text-black mb-2">
-                    Receive Quality Content
+                   Launch Campaigns
                   </h3>
                   <p className="text-gray-600 text-sm md:text-base leading-relaxed">
-                    Receive your high-quality content from influencers directly through the platform.
+                  Publish high-performing influencer campaigns designed to boost engagement, reach, and conversions.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-lg md:text-xl font-bold text-black mb-2">
+                  Track Results
+                  </h3>
+                  <p className="text-gray-600 text-sm md:text-base leading-relaxed">
+                   Monitor campaign performance with real-time analytics and transparent reporting from the Best Influencer Marketing Agency in UAE.
                   </p>
                 </div>
               </div>
@@ -932,7 +937,7 @@ export function Homepage() {
         <div className="max-w-[1400px] mx-auto">
           <div className="text-center mb-4">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">UGC Creators</h2>
-            <p className="text-gray-600 text-base md:text-lg">Meet our curated network of verified influencers across multiple categories</p>
+            <p className="text-gray-600 text-base md:text-lg">Discover Authentic UGC Creators With the Best Influencer Marketing Agency in UAE</p>
           </div>
 
           <SpotlightCarousel
@@ -960,10 +965,11 @@ export function Homepage() {
               ANALYTICS
             </Badge>
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Track Campaign Performance
+              Track Every Campaign With Real-Time Performance Insights 
+
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Monitor your influencer campaigns with real-time analytics and detailed reporting.
+              Advanced Campaign Analytics by the Best Influencer Marketing Agency in UAE 
             </p>
           </div>
 
@@ -974,7 +980,7 @@ export function Homepage() {
                 Real-Time Tracking
               </h3>
               <p className="text-gray-400">
-                Track Instagram, TikTok, and YouTube posts automatically. Metrics update every 24 hours.
+              Track influencer posts, reels, and videos with automated performance updates and real-time engagement insights.
               </p>
             </Card>
 
@@ -984,17 +990,17 @@ export function Homepage() {
                 Advanced Insights
               </h3>
               <p className="text-gray-400">
-                Analyze reach, engagement, clicks, and conversions. Export reports for stakeholders.
+               Analyze engagement, reach, clicks, conversions, and audience behavior with detailed campaign performance reporting.
               </p>
             </Card>
 
             <Card className="p-8 bg-zinc-900/50 border-zinc-800 backdrop-blur-sm">
               <Youtube className="w-12 h-12 text-primary mb-4" />
               <h3 className="text-xl font-bold text-white mb-3">
-                Campaign Dashboard
+                Smart Campaign Dashboard
               </h3>
               <p className="text-gray-400">
-                Manage all campaigns from one place. Compare performance across influencers and platforms.
+               Manage multiple influencer campaigns, compare creator performance, and monitor results from one dashboard.
               </p>
             </Card>
           </div>
@@ -1007,7 +1013,7 @@ export function Homepage() {
           <div className="flex justify-between items-center mb-8">
             <div>
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">YouTube Influencers</h2>
-              <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Hire YouTube creators for videos and shorts</p>
+              <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Collaborate With Top YouTube Creators </p>
             </div>
             <Button
               variant="ghost"
@@ -1037,10 +1043,10 @@ export function Homepage() {
               FOR CREATORS
             </Badge>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
-              Get Hired for Brand Deals
+            Get Brand Deals With the Best Influencer Marketing Agency in UAE 
             </h2>
             <p className="text-base md:text-lg lg:text-xl text-gray-400 max-w-3xl mx-auto px-4">
-              Join 330,000+ creators earning money with brand collaborations. Set your rates and work on your terms.
+            Join a Global Network of 330,000+ Creators and Start Earning With Brands 
             </p>
           </div>
 
@@ -1048,17 +1054,17 @@ export function Homepage() {
             <Card className="p-8 bg-zinc-900/50 border-zinc-800 text-center backdrop-blur-sm">
               <Users className="w-12 h-12 text-primary mb-6 mx-auto" />
               <h3 className="text-xl font-bold text-white mb-4">
-                Get Discovered
+               Get Discovered by Top Brands
               </h3>
               <p className="text-gray-400">
-                Brands actively search for creators like you. Build your profile and start receiving collaboration offers.
+              Define your rates, customize packages, and work freely with full control over earnings through One Hub platform.
               </p>
             </Card>
 
             <Card className="p-8 bg-zinc-900/50 border-zinc-800 text-center backdrop-blur-sm">
               <Star className="w-12 h-12 text-primary mb-6 mx-auto" />
               <h3 className="text-xl font-bold text-white mb-4">
-                Set Your Own Rates
+              Set Your Own Pricing and Packages
               </h3>
               <p className="text-gray-400">
                 You control your pricing and packages. No hidden fees. Keep 100% of what you earn.
@@ -1068,10 +1074,10 @@ export function Homepage() {
             <Card className="p-8 bg-zinc-900/50 border-zinc-800 text-center backdrop-blur-sm">
               <Shield className="w-12 h-12 text-primary mb-6 mx-auto" />
               <h3 className="text-xl font-bold text-white mb-4">
-                Secure Payments
+               Secure and Fast Payments:
               </h3>
               <p className="text-gray-400">
-                Payments held in escrow ensure you get paid. Fast payouts directly to your bank account.
+              Receive secure escrow payments and fast payouts after completing campaigns with verified global brands confidently.
               </p>
             </Card>
           </div>
@@ -1095,7 +1101,8 @@ export function Homepage() {
           <div className="flex justify-between items-center mb-8">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-2">TikTok Influencers</h2>
-              <p className="text-muted-foreground text-lg">Hire TikTok creators for viral content</p>
+              <p className="text-muted-foreground text-lg">Create High-Impact Short-Form Campaigns With Top TikTok Creators 
+</p>
             </div>
             <Button
               variant="ghost"
@@ -1118,9 +1125,10 @@ export function Homepage() {
       <section className="py-14 md:py-16 px-4 bg-white">
         <div className="max-w-[1350px] mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-3">Trusted by Leading Global Brands</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-3">Trusted Influencer Marketing Agency in UAE  <br />for Leading Global Brands 
+</h2>
             <p className="text-muted-foreground text-base md:text-lg">
-              Collaborating with top-tier brands to deliver impactful influencer campaigns across the Middle East and beyond.
+          Powering High-Impact Influencer Campaigns Across the Middle East and Beyond
             </p>
           </div>
 
@@ -1180,28 +1188,28 @@ export function Homepage() {
           <div className="space-y-4">
             {[
               {
-                question: "How does the marketplace work?",
-                answer: "Browse our verified influencers, select the one that fits your brand, choose a package, and make a secure payment. The influencer will create your content and deliver it through our platform. Payment is held in escrow until you're satisfied with the work."
+                question: "How does influencer marketing work on One Hub?",
+                answer: "Brands discover influencers, collaborate through secure tools, launch campaigns, and track performance using One Hub, the leading Influencer Marketing Agency in UAE platform."
               },
               {
-                question: "How do I know the influencer is legitimate?",
-                answer: "All influencers on our platform are verified with their social media accounts. We review their profiles, engagement rates, and past work. You can also see ratings and reviews from other brands who've worked with them."
+                question: "Why choose One Hub as an Influencer Marketing Agency in UAE?",
+                answer: "One Hub offers verified creators, real-time analytics, secure payments, and scalable campaigns, making it the Best Influencer Marketing Agency in UAE for all brands."
               },
               {
-                question: "What if I'm not satisfied with the content?",
-                answer: "Most packages include revisions. If there's an issue, you can communicate directly with the influencer through our messaging system. Our team is also available to help mediate and ensure you get the content you need."
+                question: "What types of influencers are available on One Hub?",
+                answer: "You can hire nano, micro, macro, and celebrity influencers across fashion, beauty, fitness, travel, tech, food, and lifestyle through our Influencer Marketing Agency in UAE."
               },
               {
-                question: "How long does it take to get content?",
-                answer: "Delivery times vary by package and influencer, typically ranging from 2-7 days. Rush delivery options may be available for an additional fee. You'll see the estimated delivery time before you book."
+                question: "How long does it take to launch a campaign?",
+                answer: "Most campaigns can be launched within minutes or hours, depending on influencer selection, through the fast Influencer Marketing Agency in UAE system."
               },
               {
-                question: "Do I get usage rights to the content?",
+                question: "What if I’m not satisfied with the content?",
                 answer: "Yes! Most packages include usage rights for your brand to use the content in your marketing. Specific rights (duration, platforms, exclusivity) are outlined in each package. You can also negotiate additional rights directly with the influencer."
               },
               {
-                question: "Can I work with multiple influencers at once?",
-                answer: "Absolutely! You can manage multiple campaigns simultaneously through your dashboard. Many brands work with several influencers to diversify their content and reach different audience segments."
+                question: "Do I get usage rights to the content?",
+                answer: "Most packages include revisions. You can communicate directly with influencers, and One Hub team helps resolve issues to ensure satisfaction through the Influencer Marketing Agency in UAE."
               }
             ].map((faq, index) => (
               <Card key={index} className="p-6 bg-zinc-900/50 border-zinc-800 hover:border-primary/50 transition-colors backdrop-blur-sm">

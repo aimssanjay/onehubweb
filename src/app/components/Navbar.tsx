@@ -125,6 +125,9 @@ export function Navbar() {
             <Link to="/how-it-works" className="text-foreground hover:text-primary transition-colors">
               How It Works
             </Link>
+           {/* <Link to="/blogs" className="text-foreground hover:text-primary transition-colors">
+              Blogs
+            </Link> */}
 
             {/* Show only when NOT logged in */}
             {!loggedInUser && (

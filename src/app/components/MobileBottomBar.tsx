@@ -1,11 +1,11 @@
 import { Link, useLocation } from 'react-router';
-import { Search, BriefcaseBusiness, Users, LogIn } from 'lucide-react';
+import { Search, BriefcaseBusiness, Users, BookOpen } from 'lucide-react';
 
 const items = [
   { label: 'Search', to: '/browse', icon: Search },
   { label: 'For Brands', to: '/brand/login', icon: BriefcaseBusiness },
   { label: 'For Creators', to: '/influencer-signup', icon: Users },
-  { label: 'Login', to: '/login', icon: LogIn },
+  { label: 'Blogs', to: '/blogs', icon: BookOpen },
 ];
 
 export function MobileBottomBar() {
@@ -34,4 +34,3 @@ export function MobileBottomBar() {
     </nav>
   );
 }
-

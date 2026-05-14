@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bold, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UnifiedInfluencerCard } from './UnifiedInfluencerCard';
 import type { Influencer } from '../../data/mockData';
 import { useRef } from 'react';
@@ -83,7 +83,7 @@ export function InstagramGridSection({ instagramInfluencers, onViewProfile }: In
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">Instagram Creators</h2>
-            <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Discover top-rated Instagram influencers</p>
+            <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Instagram Influencers That Drive Real Engagement</p>
           </div>
           <Button
             variant="ghost"

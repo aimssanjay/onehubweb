@@ -50,8 +50,7 @@ export function clearInfluencerClientData() {
     if (!key) continue;
     if (
       key.startsWith(`${LEGACY_ANALYTICS_KEY}:`) ||
-      key.startsWith(`${LEGACY_ANALYTICS_SAVED_KEY}:`) ||
-      key.startsWith('influencer_gallery_images:')
+      key.startsWith(`${LEGACY_ANALYTICS_SAVED_KEY}:`)
     ) {
       keysToRemove.push(key);
     }

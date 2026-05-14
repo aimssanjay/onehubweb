@@ -4,7 +4,7 @@ export function Footer() {
   const menuLinks = [
     { label: 'About Us', href: '/about-us' },
     { label: 'Contact', href: '#' },
-    { label: 'Blog', href: 'https://blog.onehub.ae/blogs/' },
+    { label: 'Blogs', href: '/blogs' },
   ];
 
   return (
