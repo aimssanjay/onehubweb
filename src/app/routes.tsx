@@ -18,6 +18,7 @@ import { BrandPublicProfile } from './pages/BrandPublicProfile';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { AboutUs } from './pages/AboutUs';
+import { ContactUs } from './pages/ContactUs';
 import { BlogsPage } from './pages/BlogsPage';
 import { BlogDetailsPage } from './pages/BlogDetailsPage';
 import RootLayout from './RootLayout';
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'registration', element: <Registration /> },
       { path: 'how-it-works', element: <HowItWorks /> },
       { path: 'about-us', element: <AboutUs /> },
+      { path: 'contact-us', element: <ContactUs /> },
       { path: 'blogs', element: <BlogsPage /> },
       { path: 'blogs/:slug', element: <BlogDetailsPage /> },
       { path: 'campaigns', element: <Homepage /> },

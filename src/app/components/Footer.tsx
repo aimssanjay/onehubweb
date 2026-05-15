@@ -3,7 +3,7 @@ import { Facebook, Twitter, Instagram, Linkedin, Youtube, FileText } from 'lucid
 export function Footer() {
   const menuLinks = [
     { label: 'About Us', href: '/about-us' },
-    { label: 'Contact', href: '#' },
+    { label: 'Contact Us', href: '/contact-us' },
     { label: 'Blogs', href: '/blogs' },
   ];
 

@@ -1823,7 +1823,7 @@ export function InfluencerProfile() {
 
                 {/* Bio */}
                 <p className="text-sm md:text-base text-gray-700 leading-relaxed">
-                  {influencer.bio || '2020 has taught me that pivoting is everything & I have been working to perfect the art of maintaining a versatile feed for times where certain content, ie. travel, may not be as possible. I\'m very happy to be able to share many aspects of my life with my followers, from fitness to food to fashion, etc.'}
+                  {influencer.bio || ''}
                 </p>
               </div>
             </div>
