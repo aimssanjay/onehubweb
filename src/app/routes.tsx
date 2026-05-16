@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { Navigate, createBrowserRouter } from 'react-router';
 import { Homepage } from './pages/Homepage';
 import { InfluencerListing } from './pages/InfluencerListing';
 import { InfluencerProfile } from './pages/InfluencerProfile';
@@ -30,7 +30,8 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <Homepage /> },
-      { path: 'browse', element: <InfluencerListing /> },
+      { path: 'influencers', element: <InfluencerListing /> },
+      { path: 'browse', element: <Navigate to="/influencers" replace /> },
       { path: 'influencer/:id', element: <InfluencerProfile /> },
       // Backward-compatible legacy URL from old indexed links
       { path: 'influencers/:id', element: <InfluencerProfile /> },

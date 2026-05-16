@@ -481,7 +481,7 @@ export function HowItWorks() {
             <Button 
               size="lg" 
               className="bg-pink-500 hover:bg-pink-600 text-white cursor-pointer"
-              onClick={() => navigate('/browse')}
+              onClick={() => navigate('/influencers')}
             >
               Browse Influencers
             </Button>
@@ -499,3 +499,4 @@ export function HowItWorks() {
     </div>
   );
 }
+

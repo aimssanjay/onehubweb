@@ -418,7 +418,7 @@ export function BrandDashboard() {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setIsMobileMenuOpen(false);
-    if (tab === 'browse') navigate('/browse');
+    if (tab === 'browse') navigate('/influencers');
   };
 
   const toggleCampaignCategory = (id: number) => {
@@ -780,7 +780,7 @@ export function BrandDashboard() {
                     className="bg-primary hover:bg-secondary text-black font-semibold px-4 md:px-6 py-2.5 md:py-3 rounded-lg transition-colors text-sm md:text-base">
                     <Folder className="w-4 h-4 mr-2 inline" /> Manage Campaigns
                   </button>
-                  <Link to="/browse">
+                  <Link to="/influencers">
                     <button className="bg-gray-900 hover:bg-gray-800 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-lg transition-colors border border-gray-700 text-sm md:text-base">
                       <Users className="w-4 h-4 mr-2 inline" /> Browse Influencers
                     </button>
@@ -1510,3 +1510,4 @@ export function BrandDashboard() {
     </div>
   );
 }
+

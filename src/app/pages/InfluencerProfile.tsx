@@ -1364,7 +1364,7 @@ export function InfluencerProfile() {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <Card className="p-8 text-center bg-white border border-gray-200">
           <p className="text-gray-600 mb-4">{profileError || 'Influencer not found'}</p>
-          <Button onClick={() => navigate('/browse')} className="bg-primary hover:bg-secondary text-black">
+          <Button onClick={() => navigate('/influencers')} className="bg-primary hover:bg-secondary text-black">
             Back to Browse
           </Button>
         </Card>
@@ -2311,4 +2311,5 @@ export function InfluencerProfile() {
     </div>
   );
 }
+
 

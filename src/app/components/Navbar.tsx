@@ -113,7 +113,7 @@ export function Navbar() {
             <Link to="/" className="text-foreground hover:text-primary transition-colors">
               Home
             </Link>
-            <Link to="/browse" className="text-foreground hover:text-primary transition-colors">
+            <Link to="/influencers" className="text-foreground hover:text-primary transition-colors">
               Browse Creators
             </Link>
             {/*<Link to="/campaigns" className="text-foreground hover:text-primary transition-colors">
@@ -238,3 +238,4 @@ export function Navbar() {
     </nav>
   );
 }
+

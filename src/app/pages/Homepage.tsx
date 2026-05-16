@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
@@ -663,7 +663,7 @@ export function Homepage() {
   const heroBadges = ['AJMAL', 'SONY', 'YAMAHA', 'KAPIVA', 'ORGANIC'];
 
   const handleSearch = (platforms: string[], categories: string[]) => {
-    navigate('/browse', { state: { platforms, categories } });
+    navigate('/influencers', { state: { platforms, categories } });
   };
 
   // Navigation helper to match old onNavigate signature
@@ -689,9 +689,9 @@ export function Homepage() {
       }
     } else if (page === 'browse') {
       if (data) {
-        navigate('/browse', { state: data });
+        navigate('/influencers', { state: data });
       } else {
-        navigate('/browse');
+        navigate('/influencers');
       }
     } else if (page === 'signup-influencer') {
       navigate('/signup-influencer');
@@ -1204,7 +1204,7 @@ export function Homepage() {
                 answer: "Most campaigns can be launched within minutes or hours, depending on influencer selection, through the fast Influencer Marketing Agency in UAE system."
               },
               {
-                question: "What if I’m not satisfied with the content?",
+                question: "What if I�m not satisfied with the content?",
                 answer: "Yes! Most packages include usage rights for your brand to use the content in your marketing. Specific rights (duration, platforms, exclusivity) are outlined in each package. You can also negotiate additional rights directly with the influencer."
               },
               {
@@ -1294,3 +1294,4 @@ export function Homepage() {
     </div>
   );
 }
+
