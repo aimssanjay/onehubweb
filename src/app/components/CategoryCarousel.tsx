@@ -7,13 +7,47 @@ import { useCategories } from '../hooks/useCategories';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1653640869615-e9878a2c8344?w=400';
 
+const CATEGORY_ORDER = [
+  'Fashion',
+  'Beauty & Skincare',
+  'Lifestyle',
+  'Food & Dining',
+  'Travel',
+  'Fitness & Wellness',
+  'Health',
+  'Tech & Gadgets',
+  'Gaming',
+  'Comedy / Entertainment',
+  'Music & Dance',
+  'Luxury Lifestyle',
+  'Real Estate / Property',
+  'Business / Entrepreneurship',
+  'Finance / Finfluencers',
+  'Automotive / Cars',
+  'Parenting / Family',
+  'Kids / Mom Bloggers',
+  'Education / Student Creators',
+  'Restaurant / Café Reviewers',
+  'UGC Creators',
+  'Viral / Meme Pages',
+  'Motivation / Self Growth',
+];
+
 interface CategoryCarouselProps {
   onCategorySelect?: (category: string) => void;
 }
 
 export function CategoryCarousel({ onCategorySelect }: CategoryCarouselProps) {
-  const { categories } = useCategories();
+  const { categories: rawCategories } = useCategories();
   const sliderRef = useRef<Slider>(null);
+
+  const categories = [...rawCategories].sort((a, b) => {
+    const ai = CATEGORY_ORDER.findIndex(n => n.toLowerCase() === a.name.toLowerCase());
+    const bi = CATEGORY_ORDER.findIndex(n => n.toLowerCase() === b.name.toLowerCase());
+    const aPos = ai === -1 ? Infinity : ai;
+    const bPos = bi === -1 ? Infinity : bi;
+    return aPos - bPos;
+  });
 
   const settings = {
     dots: false,

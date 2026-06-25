@@ -660,7 +660,6 @@ export function Homepage() {
       'https://res.cloudinary.com/dkdlfnhdm/image/upload/v1777039424/myapp-images/users_1777039440316_ABEER%20ALABBADI.jpg',
     ],
   ];
-  const heroBadges = ['AJMAL', 'SONY', 'YAMAHA', 'KAPIVA', 'ORGANIC'];
 
   const handleSearch = (platforms: string[], categories: string[]) => {
     navigate('/influencers', { state: { platforms, categories } });
@@ -763,11 +762,6 @@ export function Homepage() {
                   >
                     <img src={image} alt="Influencer marketing content" className="w-full h-full object-cover" loading="lazy" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-                    {(imageIndex + columnIndex) % 2 === 0 && (
-                      <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-semibold bg-white text-[#0d163f] border border-gray-200">
-                        {heroBadges[(imageIndex + columnIndex) % heroBadges.length]}
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>
@@ -802,11 +796,6 @@ export function Homepage() {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-                      {(index + columnIndex) % 2 === 0 && (
-                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white text-[#0d163f] border border-gray-200">
-                          {heroBadges[(index + columnIndex) % heroBadges.length]}
-                        </span>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -1143,20 +1132,14 @@ export function Homepage() {
               <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-white to-transparent z-10" />
               <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-white to-transparent z-10" />
               <div className="flex w-max animate-[brand-scroll_32s_linear_infinite] gap-6 md:gap-10 items-center">
-                {[...brands, ...brands].map((brand, index) => (
+                {[...brands.filter(b => b.profilePic), ...brands.filter(b => b.profilePic)].map((brand, index) => (
                   <div key={`${brand.id}-${index}`} className="shrink-0 h-16 md:h-20 w-[160px] md:w-[210px] flex items-center justify-center overflow-hidden">
-                    {brand.profilePic ? (
-                      <img
-                        src={brand.profilePic}
-                        alt={brand.name}
-                        className="w-full h-full object-cover opacity-100 hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <span className="text-xl md:text-2xl font-semibold text-gray-400 whitespace-nowrap">
-                        {brand.name}
-                      </span>
-                    )}
+                    <img
+                      src={brand.profilePic}
+                      alt={brand.name}
+                      className="w-full h-full object-cover opacity-100 hover:opacity-90 transition-opacity"
+                      loading="lazy"
+                    />
                   </div>
                 ))}
               </div>
@@ -1204,7 +1187,7 @@ export function Homepage() {
                 answer: "Most campaigns can be launched within minutes or hours, depending on influencer selection, through the fast Influencer Marketing Agency in UAE system."
               },
               {
-                question: "What if I’m not satisfied with the content?",
+                question: "What if Iï¿½m not satisfied with the content?",
                 answer: "Yes! Most packages include usage rights for your brand to use the content in your marketing. Specific rights (duration, platforms, exclusivity) are outlined in each package. You can also negotiate additional rights directly with the influencer."
               },
               {
