@@ -10,7 +10,7 @@ export default defineConfig({
   ],
 
   server: {
-    allowedHosts: ['influencer.onehub.ae']
+    allowedHosts: ['influencerhub.ae']
   },
 
   resolve: {

@@ -60,7 +60,7 @@ export default function Registration() {
   e.preventDefault();
 
   try {
-    const response = await fetch("https://api.onehub.ae/api/users/register", {
+    const response = await fetch("https://api.influencerhub.ae/api/users/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

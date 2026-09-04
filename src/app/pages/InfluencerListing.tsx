@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useLocation, useNavigate } from 'react-router';
-import { SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SlidersHorizontal, X, Grid3x3, LayoutList, ChevronDown, ChevronUp, Shield, Zap, TrendingUp, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -21,10 +21,28 @@ interface InfluencerListResponse {
   message?: string;
 }
 
-const DEFAULT_LIMIT = 12;
+const DEFAULT_LIMIT = 16;
 const DEFAULT_FOLLOWER_RANGE: [number, number] = [0, 1000000];
 const DEFAULT_PRICE_RANGE: [number, number] = [0, 10000];
 const DEFAULT_ENGAGEMENT_RANGE: [number, number] = [0, 10];
+
+const NATIONALITY_OPTIONS = [
+  'Indian', 'Emirati', 'Pakistani', 'Filipino', 'British',
+  'American', 'Egyptian', 'Lebanese', 'Saudi', 'Other',
+];
+
+const NATIONALITY_COUNTRY_MAP: Record<string, string[]> = {
+  'Indian':    ['india', 'indian'],
+  'Emirati':   ['uae', 'united arab emirates', 'emirati'],
+  'Pakistani': ['pakistan', 'pakistani'],
+  'Filipino':  ['philippines', 'filipino'],
+  'British':   ['united kingdom', 'uk', 'britain', 'british', 'england'],
+  'American':  ['united states', 'usa', 'us', 'american'],
+  'Egyptian':  ['egypt', 'egyptian'],
+  'Lebanese':  ['lebanon', 'lebanese'],
+  'Saudi':     ['saudi arabia', 'ksa', 'saudi'],
+  'Other':     [],
+};
 
 function parseNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number') {
@@ -191,11 +209,13 @@ export function InfluencerListing() {
   const [engagementRange, setEngagementRange] = useState<number[]>([...DEFAULT_ENGAGEMENT_RANGE]);
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
-  
+  const [selectedNationalities, setSelectedNationalities] = useState<string[]>([]);
+
   // Collapsible sections
   const [expandedSections, setExpandedSections] = useState({
     platform: true,
     category: true,
+    nationality: true,
     location: false,
     price: true,
     followers: true,
@@ -282,9 +302,46 @@ export function InfluencerListing() {
     [apiPlatforms]
   );
 
+  const getInfluencerNationality = (influencer: Influencer): string => {
+    const row = influencer.rawApiData as Record<string, unknown> | undefined;
+    const raw = String(
+      (row?.nationality) ??
+      (row?.country_name) ??
+      (row?.country) ??
+      influencer.location ??
+      ''
+    ).toLowerCase().trim();
+    if (!raw) return 'Other';
+    for (const [label, keywords] of Object.entries(NATIONALITY_COUNTRY_MAP)) {
+      if (label === 'Other') continue;
+      if (keywords.some((kw) => raw.includes(kw))) return label;
+    }
+    return 'Other';
+  };
+
+  const matchesNationality = (influencer: Influencer): boolean => {
+    if (selectedNationalities.length === 0) return true;
+    return selectedNationalities.includes(getInfluencerNationality(influencer));
+  };
+
+  const availableCategories = useMemo(() => {
+    const presentNames = new Set<string>();
+    influencerResults.forEach((inf) => {
+      (inf.categories ?? [inf.category]).forEach((name) => presentNames.add(name));
+    });
+    return categories.filter((cat) => presentNames.has(cat.name));
+  }, [influencerResults, categories]);
+
+  const availableNationalities = useMemo(() => {
+    const presentNats = new Set(influencerResults.map((inf) => getInfluencerNationality(inf)));
+    return NATIONALITY_OPTIONS.filter((nat) => presentNats.has(nat));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [influencerResults]);
+
   const apiInfluencers = useMemo(
     () => {
-      const sorted = [...influencerResults];
+      const filtered = influencerResults.filter((inf) => matchesNationality(inf));
+      const sorted = [...filtered];
       if (sortBy === 'price-low') {
         sorted.sort((a, b) => a.startingPrice - b.startingPrice);
       } else if (sortBy === 'price-high') {
@@ -298,7 +355,8 @@ export function InfluencerListing() {
       }
       return sorted;
     },
-    [influencerResults, sortBy]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [influencerResults, sortBy, selectedNationalities]
   );
 
   const badges = [
@@ -326,6 +384,12 @@ export function InfluencerListing() {
     );
   };
 
+  const toggleNationality = (nat: string) => {
+    setSelectedNationalities((prev) =>
+      prev.includes(nat) ? prev.filter((n) => n !== nat) : [...prev, nat]
+    );
+  };
+
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
@@ -334,12 +398,98 @@ export function InfluencerListing() {
     setSearchQuery('');
     setSelectedCategories([]);
     setSelectedPlatforms([]);
+    setSelectedNationalities([]);
     setFollowerRange([...DEFAULT_FOLLOWER_RANGE]);
     setPriceRange([...DEFAULT_PRICE_RANGE]);
     setEngagementRange([...DEFAULT_ENGAGEMENT_RANGE]);
     setSelectedBadges([]);
     setMinRating(0);
     setCurrentPage(1);
+  };
+
+  const csvEscape = (value: string): string => {
+    const str = value == null ? '' : String(value);
+    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const allPlatformIds = apiPlatforms.map((p) => p.id).filter((id) => Number.isFinite(id));
+      const allCategoryIds = categories.map((c) => c.id).filter((id) => Number.isFinite(id));
+      const effectivePlatformIds = selectedPlatforms.length > 0 ? selectedPlatforms : (allPlatformIds.length > 0 ? allPlatformIds : [1, 2, 3, 4]);
+      const effectiveCategoryIds = selectedCategories.length > 0 ? selectedCategories : (allCategoryIds.length > 0 ? allCategoryIds : undefined);
+
+      const payload: Record<string, unknown> = {
+        platform_id: effectivePlatformIds,
+        category_id: effectiveCategoryIds,
+        keyword: searchQuery.trim(),
+        page: 1,
+        limit: 1000,
+      };
+      const hasPriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
+      const hasFollowerFilter = followerRange[0] !== DEFAULT_FOLLOWER_RANGE[0] || followerRange[1] !== DEFAULT_FOLLOWER_RANGE[1];
+      const hasEngagementFilter = engagementRange[0] !== DEFAULT_ENGAGEMENT_RANGE[0] || engagementRange[1] !== DEFAULT_ENGAGEMENT_RANGE[1];
+      if (hasPriceFilter) { payload.min_price = priceRange[0]; payload.max_price = priceRange[1]; }
+      if (hasFollowerFilter) { payload.min_followers = followerRange[0]; payload.max_followers = followerRange[1]; }
+      if (hasEngagementFilter) { payload.min_engagement = engagementRange[0]; payload.max_engagement = engagementRange[1]; }
+
+      const response = await fetch(`${API_BASE_URL}/influencers/get-influencers-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result: InfluencerListResponse = await response.json();
+      const responseData = (result?.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>;
+      const rawRows =
+        (Array.isArray(responseData.influencers) && responseData.influencers) ||
+        (Array.isArray(responseData.list) && responseData.list) ||
+        (Array.isArray(responseData.rows) && responseData.rows) ||
+        (Array.isArray(result.data) && result.data) ||
+        [];
+
+      const allMapped = rawRows
+        .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+        .map((row, index) => mapApiInfluencer(row, index));
+
+      const exportRows = selectedNationalities.length > 0
+        ? allMapped.filter((inf) => matchesNationality(inf))
+        : allMapped;
+
+      const header = ['Name', 'Nationality', 'Email', 'Instagram Profile Link', 'Instagram Followers'];
+      const lines = [header.map(csvEscape).join(',')];
+
+      exportRows.forEach((inf) => {
+        const row = inf.rawApiData as Record<string, unknown> | undefined;
+        const email = String(row?.email ?? '');
+        const igHandle = String(row?.username ?? row?.handle ?? inf.username ?? '').replace(/^@/, '');
+        const igLink = igHandle ? `https://instagram.com/${igHandle}` : '';
+        const igFollowers = inf.platforms?.instagram ? String(inf.platforms.instagram) : '';
+        const nationality = getInfluencerNationality(inf);
+        lines.push([
+          csvEscape(inf.name),
+          csvEscape(nationality),
+          csvEscape(email),
+          csvEscape(igLink),
+          csvEscape(igFollowers),
+        ].join(','));
+      });
+
+      const bom = '﻿';
+      const csv = bom + lines.join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'influencers-export.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — user can retry
+    }
   };
 
   const formatFollowers = (count: number) => {
@@ -588,7 +738,7 @@ export function InfluencerListing() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategories, selectedPlatforms, followerRange, priceRange, engagementRange, minRating]);
+  }, [searchQuery, selectedCategories, selectedPlatforms, selectedNationalities, followerRange, priceRange, engagementRange, minRating]);
 
   useEffect(() => {
     const fetchInfluencers = async () => {
@@ -835,7 +985,7 @@ export function InfluencerListing() {
       {/* Category Filter */}
       <FilterSection title="Category / Niche" section="category">
         <div className="space-y-2">
-          {categories.slice(0, 8).map((category) => (
+          {availableCategories.map((category) => (
             <div key={category.id} className="flex items-center">
               <Checkbox
                 id={`category-${category.id}`}
@@ -847,6 +997,27 @@ export function InfluencerListing() {
                 className="ml-3 text-sm cursor-pointer flex-1 text-foreground"
               >
                 {category.name}
+              </label>
+            </div>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* Nationality Filter */}
+      <FilterSection title="Nationality" section="nationality">
+        <div className="space-y-2">
+          {availableNationalities.map((nat) => (
+            <div key={nat} className="flex items-center">
+              <Checkbox
+                id={`nationality-${nat}`}
+                checked={selectedNationalities.includes(nat)}
+                onCheckedChange={() => toggleNationality(nat)}
+              />
+              <label
+                htmlFor={`nationality-${nat}`}
+                className="ml-3 text-sm cursor-pointer flex-1 text-foreground"
+              >
+                {nat}
               </label>
             </div>
           ))}
@@ -1046,15 +1217,24 @@ export function InfluencerListing() {
                 >
                   <SlidersHorizontal className="w-4 h-4" />
                   Filters
-                  {(selectedCategories.length > 0 || selectedPlatforms.length > 0) && (
+                  {(selectedCategories.length > 0 || selectedPlatforms.length > 0 || selectedNationalities.length > 0) && (
                     <Badge className="ml-1 bg-primary text-primary-foreground">
-                      {selectedCategories.length + selectedPlatforms.length}
+                      {selectedCategories.length + selectedPlatforms.length + selectedNationalities.length}
                     </Badge>
                   )}
                 </Button>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  <span className="text-foreground font-semibold">{totalCount}</span> creators
+                  <span className="text-foreground font-semibold">{apiInfluencers.length}</span> creators
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCSV}
+                  className="gap-1.5 border-border text-foreground hover:text-primary text-xs sm:text-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export CSV
+                </Button>
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3">
@@ -1094,7 +1274,7 @@ export function InfluencerListing() {
             </div>
 
             {/* Active Filters */}
-            {(selectedCategories.length > 0 || selectedPlatforms.length > 0) && (
+            {(selectedCategories.length > 0 || selectedPlatforms.length > 0 || selectedNationalities.length > 0) && (
               <div className="flex flex-wrap gap-2 mb-4 lg:mb-6">
                 {selectedCategories.map((categoryId) => (
                   <Badge
@@ -1118,13 +1298,24 @@ export function InfluencerListing() {
                     <X className="w-3 h-3" />
                   </Badge>
                 ))}
+                {selectedNationalities.map((nat) => (
+                  <Badge
+                    key={nat}
+                    variant="secondary"
+                    className="gap-2 cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 text-xs sm:text-sm"
+                    onClick={() => toggleNationality(nat)}
+                  >
+                    {nat}
+                    <X className="w-3 h-3" />
+                  </Badge>
+                ))}
               </div>
             )}
 
             {/* Influencer Grid */}
             <div className={`grid ${
-              viewMode === 'grid' 
-                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3' 
+              viewMode === 'grid'
+                ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                 : 'grid-cols-1'
             } gap-4 sm:gap-5 lg:gap-6`}>
               {apiInfluencers.map((influencer) => (

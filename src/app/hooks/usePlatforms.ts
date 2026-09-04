@@ -13,7 +13,7 @@ export function usePlatforms() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('https://api.onehub.ae/api/platform/get-all-platforms')
+    fetch('https://api.influencerhub.ae/api/platform/get-all-platforms')
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
