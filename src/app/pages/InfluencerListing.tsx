@@ -1226,15 +1226,17 @@ export function InfluencerListing() {
                 <p className="text-xs sm:text-sm text-muted-foreground">
                   <span className="text-foreground font-semibold">{apiInfluencers.length}</span> creators
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportCSV}
-                  className="gap-1.5 border-border text-foreground hover:text-primary text-xs sm:text-sm"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Export CSV
-                </Button>
+                {false && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCSV}
+                    className="gap-1.5 border-border text-foreground hover:text-primary text-xs sm:text-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export CSV
+                  </Button>
+                )}
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3">
