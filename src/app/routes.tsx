@@ -1,67 +1,15 @@
 import { Navigate, createBrowserRouter } from 'react-router';
-import { Homepage } from './pages/Homepage';
-import { InfluencerListing } from './pages/InfluencerListing';
-import { InfluencerProfile } from './pages/InfluencerProfile';
-import { Login } from './pages/Login';
-import { BrandSignup } from './pages/BrandSignup';
-import { BrandDashboard } from './pages/BrandDashboard';
-import { Checkout } from './pages/Checkout';
-import { Pricing } from './pages/Pricing';
-import { AdminPanel } from './pages/AdminPanel';
-import Registration from './pages/Registration';
-import { HowItWorks } from './pages/HowItWorks';
 import { InfluencerSignup } from './pages/InfluencerSignup';
 import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerDashboardNew from './pages/InfluencerDashboard';
-import { BrandLogin } from './pages/BrandLogin';
-import { BrandPublicProfile } from './pages/BrandPublicProfile';
-import { ForgotPassword } from './pages/ForgotPassword';
-import { ResetPassword } from './pages/ResetPassword';
-import { AboutUs } from './pages/AboutUs';
-import { ContactUs } from './pages/ContactUs';
-import { BlogsPage } from './pages/BlogsPage';
-import { BlogDetailsPage } from './pages/BlogDetailsPage';
-import RootLayout from './RootLayout';
 
 export const router = createBrowserRouter([
-  // ✅ Pages WITH main navbar + footer
-  {
-    path: '/',
-    element: <RootLayout />,
-    children: [
-      { index: true, element: <Homepage /> },
-      { path: 'influencers', element: <InfluencerListing /> },
-      { path: 'browse', element: <Navigate to="/influencers" replace /> },
-      { path: 'influencer/:id', element: <InfluencerProfile /> },
-      // Backward-compatible legacy URL from old indexed links
-      { path: 'influencers/:id', element: <InfluencerProfile /> },
-      { path: 'profile/:id', element: <InfluencerProfile /> },
-      { path: 'login', element: <Login /> },
-      { path: 'signup', element: <BrandSignup /> },
-      { path: 'signup-brand', element: <BrandSignup /> },
-      { path: 'influencer-signup', element: <InfluencerSignup /> },
-      { path: 'influencer/login', element: <InfluencerLogin /> },
-      { path: 'checkout', element: <Checkout /> },
-      { path: 'pricing', element: <Pricing /> },
-      { path: 'admin', element: <AdminPanel /> },
-      { path: 'registration', element: <Registration /> },
-      { path: 'how-it-works', element: <HowItWorks /> },
-      { path: 'about-us', element: <AboutUs /> },
-      { path: 'contact-us', element: <ContactUs /> },
-      { path: 'blogs', element: <BlogsPage /> },
-      { path: 'blogs/:slug', element: <BlogDetailsPage /> },
-      { path: 'campaigns', element: <Homepage /> },
-      { path: 'brand/login', element: <BrandLogin /> },
-      { path: 'forgot-password', element: <ForgotPassword /> },
-      { path: 'reset-password', element: <ResetPassword /> },
-      { path: 'reset-password/:token', element: <ResetPassword /> },
-    ],
-  },
-
-  // ✅ Dashboard pages WITHOUT main navbar (no double header)
-  { path: 'brand-dashboard', element: <BrandDashboard /> },
-  { path: 'dashboard-brand', element: <BrandDashboard /> },
-  { path: 'brand-public-profile', element: <BrandPublicProfile /> },
+  // Only the influencer login/signup/dashboard flow is exposed for now.
+  { path: '/', element: <InfluencerLogin /> },
+  { path: 'influencer/login', element: <InfluencerLogin /> },
+  { path: 'influencer-signup', element: <InfluencerSignup /> },
   { path: 'influencer/dashboard', element: <InfluencerDashboardNew /> },
-  { path: 'dashboard-influencer', element: <InfluencerDashboardNew /> },
+
+  // Everything else redirects back to the influencer login screen.
+  { path: '*', element: <Navigate to="/" replace /> },
 ]);
