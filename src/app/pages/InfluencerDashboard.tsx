@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type DragEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Navbar } from '../components/Navbar';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -1785,8 +1784,6 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-16 md:pb-0 [&_a]:cursor-pointer [&_button]:cursor-pointer">
-      <Navbar />
-
       {/* Portal bar */}
       <div className="bg-black border-b border-gray-800 px-4 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
