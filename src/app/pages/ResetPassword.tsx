@@ -22,7 +22,8 @@ export function ResetPassword() {
   // 1) /reset-password/:token
   // 2) /reset-password?token=...
   const token = pathToken || searchParams.get('token');
-  const userType = searchParams.get('type') || 'brand';
+  // The emailed link has no type, and only the influencer flow is live
+  const userType = searchParams.get('type') || 'influencer';
   const isBrand = userType === 'brand';
 
   // Password validation
@@ -73,15 +74,12 @@ export function ResetPassword() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/change-password`, {
+      const response = await fetch(`${API_BASE_URL}/users/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          current_password: token,
-          new_password: password,
-        }),
+        body: JSON.stringify({ token, password }),
       });
 
       const data = await response.json();
@@ -133,9 +131,9 @@ export function ResetPassword() {
             <>
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-4xl font-bold text-black mb-3">Set New Password</h1>
+                <h1 className="text-4xl font-bold text-black mb-3">Set a New Password</h1>
                 <p className="text-lg text-gray-600">
-                  Create a strong password for your {isBrand ? 'brand' : 'influencer'} account.
+                  Choose a strong password you haven't used before.
                 </p>
               </div>
 
@@ -252,7 +250,7 @@ export function ResetPassword() {
                     onClick={handleBackToLogin}
                     className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
                   >
-                    Back to login
+                    Back to sign in
                   </button>
                 </div>
               </form>
@@ -264,14 +262,14 @@ export function ResetPassword() {
                 <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
                   <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
-                <h1 className="text-4xl font-bold text-black mb-3">Password Reset Successful!</h1>
+                <h1 className="text-4xl font-bold text-black mb-3">Password Updated</h1>
                 <p className="text-lg text-gray-600 mb-8">
-                  Your password has been successfully reset. You can now log in with your new password.
+                  Your password has been reset. You can now sign in with your new password.
                 </p>
-                
+
                 <div className="bg-green-50 rounded-lg p-4 mb-8">
                   <p className="text-sm text-green-800">
-                    Redirecting you to login page...
+                    Taking you to the sign-in page...
                   </p>
                 </div>
 
@@ -279,7 +277,7 @@ export function ResetPassword() {
                   onClick={handleBackToLogin}
                   className="w-full h-12 bg-primary hover:bg-secondary text-black font-semibold"
                 >
-                  Go to Login
+                  Go to Sign In
                 </Button>
               </div>
             </>
@@ -297,28 +295,28 @@ export function ResetPassword() {
             Secure Password Reset
           </h2>
           <p className="text-white/90 text-lg mb-6">
-            We use industry-standard encryption to keep your account secure. Your new password will be encrypted and safely stored.
+            Your new password is encrypted before it's saved, so no one, including OneHub, can read it.
           </p>
           <div className="space-y-3 text-left bg-white/10 backdrop-blur-sm rounded-lg p-6">
             <div className="flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-white font-semibold">Strong Encryption</p>
-                <p className="text-white/80 text-sm">Military-grade security</p>
+                <p className="text-white font-semibold">Encrypted Storage</p>
+                <p className="text-white/80 text-sm">Passwords are never stored as plain text</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-white font-semibold">Secure Token</p>
-                <p className="text-white/80 text-sm">One-time use reset link</p>
+                <p className="text-white font-semibold">Personal Link</p>
+                <p className="text-white/80 text-sm">The reset link only works for your account</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <CheckCircle className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-white font-semibold">Time Limited</p>
-                <p className="text-white/80 text-sm">Expires after 15 minutes</p>
+                <p className="text-white/80 text-sm">The link expires 15 minutes after it's sent</p>
               </div>
             </div>
           </div>

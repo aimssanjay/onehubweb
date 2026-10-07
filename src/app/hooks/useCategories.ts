@@ -13,7 +13,7 @@ export function useCategories() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('https://api.influencerhub.ae/api/categories/get-all-categories')
+    fetch(`${API_BASE_URL}/categories/get-all-categories`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {

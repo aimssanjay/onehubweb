@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Mail, ArrowLeft, CheckCircle, Sparkles } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle, Sparkles, RotateCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
@@ -14,11 +14,16 @@ export function ForgotPassword() {
   const navigate = useNavigate();
   
   // Check if this is for brand or influencer
-  const userType = searchParams.get('type') || 'brand';
+  const userType = searchParams.get('type') || 'influencer';
   const isBrand = userType === 'brand';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await sendResetLink();
+  };
+
+  // Used by the form and by "Send It Again" on the confirmation screen
+  const sendResetLink = async () => {
     setIsLoading(true);
 
     try {
@@ -35,6 +40,7 @@ export function ForgotPassword() {
 
       const result = await response.json();
       if (result.success || response.ok) {
+        if (isSubmitted) toast.success('A new reset link has been sent');
         setIsSubmitted(true);
       } else {
         toast.error(result.message || 'Failed to send reset link');
@@ -76,11 +82,11 @@ export function ForgotPassword() {
                   className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span className="text-sm font-medium">Back to login</span>
+                  <span className="text-sm font-medium">Back to sign in</span>
                 </button>
                 <h1 className="text-4xl font-bold text-black mb-3">Forgot Password?</h1>
                 <p className="text-lg text-gray-600">
-                  No worries! Enter your email and we'll send you reset instructions.
+                  Enter the email address linked to your account and we'll send you a link to reset your password.
                 </p>
               </div>
 
@@ -123,59 +129,57 @@ export function ForgotPassword() {
                 </div>
                 <h1 className="text-4xl font-bold text-black mb-3">Check Your Email</h1>
                 <p className="text-lg text-gray-600 mb-8">
-                  We've sent password reset instructions to <strong>{email}</strong>
+                  We've sent a password reset link to <strong>{email}</strong>
                 </p>
-                
+
                 <div className="bg-gray-50 rounded-lg p-6 mb-8 text-left">
                   <p className="text-sm text-gray-600 mb-4">
-                    <strong>Next steps:</strong>
+                    <strong>What to do next:</strong>
                   </p>
                   <ol className="space-y-2 text-sm text-gray-600">
                     <li className="flex gap-2">
                       <span className="font-semibold">1.</span>
-                      <span>Check your inbox for an email from OneHub</span>
+                      <span>Open the email from OneHub in your inbox</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="font-semibold">2.</span>
-                      <span>Click the reset password link in the email</span>
+                      <span>Click the reset link within 15 minutes, before it expires</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="font-semibold">3.</span>
-                      <span>Create a new password for your account</span>
+                      <span>Set a new password and sign in</span>
                     </li>
                   </ol>
                 </div>
 
-                {/* Test Button - For Development */}
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                  <p className="text-xs text-yellow-800 mb-3 font-medium">
-                    🧪 DEMO MODE - Click below to test the reset password flow
-                  </p>
-                  <Button
-                    onClick={() => navigate(`/reset-password?token=demo-token-${Date.now()}&type=${userType}`)}
-                    className="w-full h-10 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold"
-                  >
-                    Simulate Email Link (Test)
-                  </Button>
-                </div>
-
-                <p className="text-sm text-gray-600 mb-6">
-                  Didn't receive the email? Check your spam folder or{' '}
-                  <button
-                    onClick={() => setIsSubmitted(false)}
-                    className="text-primary hover:text-secondary font-semibold"
-                  >
-                    try again
-                  </button>
+                <p className="text-sm text-gray-600 mb-4">
+                  Didn't get the email? Check your spam or junk folder, or send it again.
                 </p>
+
+                <Button
+                  onClick={sendResetLink}
+                  disabled={isLoading}
+                  className="w-full h-12 mb-3 gap-2 bg-primary hover:bg-secondary text-white font-semibold"
+                >
+                  <RotateCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  {isLoading ? 'Sending...' : 'Send It Again'}
+                </Button>
 
                 <Button
                   onClick={handleBackToLogin}
                   variant="outline"
                   className="w-full h-12 border-2"
                 >
-                  Back to Login
+                  Back to Sign In
                 </Button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSubmitted(false)}
+                  className="mt-4 text-sm text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
+                >
+                  Use a different email
+                </button>
               </div>
             </>
           )}
@@ -189,10 +193,12 @@ export function ForgotPassword() {
             <Mail className="w-10 h-10 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-white mb-4">
-            Reset Your Password Securely
+            {isSubmitted ? 'Check Your Inbox' : 'Reset Your Password Securely'}
           </h2>
           <p className="text-white/90 text-lg">
-            We'll send you a secure link to reset your password. The link will expire in 15 minutes for your security.
+            {isSubmitted
+              ? 'Your reset link is on its way. For your security, it expires 15 minutes after it was sent.'
+              : "We'll email you a secure link to reset your password. For your security, the link expires after 15 minutes."}
           </p>
         </div>
       </div>

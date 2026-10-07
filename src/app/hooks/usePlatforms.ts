@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../services/api';
 
 export interface Platform {
   id: number;
@@ -13,7 +14,7 @@ export function usePlatforms() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('https://api.influencerhub.ae/api/platform/get-all-platforms')
+    fetch(`${API_BASE_URL}/platform/get-all-platforms`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {

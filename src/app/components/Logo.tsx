@@ -16,7 +16,7 @@ export function Logo({ className = "h-16", onClick }: LogoProps) {
       <img 
         src={logo}
         alt="Logo"
-        className={className}
+        className={`${className} ${onClick ? 'cursor-pointer' : ''}`}
         style={{ objectFit: 'contain' }}
         onError={() => setImageError(true)}
         onClick={onClick}
@@ -27,7 +27,7 @@ export function Logo({ className = "h-16", onClick }: LogoProps) {
   // ✅ Fallback custom logo
   return (
     <div 
-      className={`flex items-center gap-2 ${className}`}
+      className={`flex items-center gap-2 ${className} ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
       style={{ height: 'auto' }}
     >

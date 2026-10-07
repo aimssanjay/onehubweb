@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Eye, EyeOff, Lock, User } from 'lucide-react';
 import { clearInfluencerClientData } from '../utils/influencerStorage';
+import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
@@ -43,7 +44,7 @@ const handleLogin = async (e: React.FormEvent) => {
       payload.phone = loginId;
     }
 
-    const response = await fetch("https://api.influencerhub.ae/api/users/login", {
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.LOGIN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
