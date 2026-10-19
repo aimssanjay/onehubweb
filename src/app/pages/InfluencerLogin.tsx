@@ -2,7 +2,26 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, ArrowRight, Gift, BarChart3, Heart, Instagram, Sparkles, Send } from 'lucide-react';
+// Unsplash photos (free licence), saved locally
+import creatorWoman from '../../assets/auth/creator-woman.jpg';
+import creatorMan from '../../assets/auth/creator-man.jpg';
+
+// Simplified Dubai skyline (Burj Khalifa in the middle) drawn behind the headline
+function DubaiSkyline({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 200 420" className={className} fill="currentColor" aria-hidden="true">
+      <rect x="6" y="300" width="22" height="120" rx="2" />
+      <path d="M32 420V240c0-10 8-18 16-20 8 2 16 10 16 20v180z" />
+      <rect x="66" y="270" width="16" height="150" rx="2" />
+      {/* Burj Khalifa: stepped spire */}
+      <polygon points="99,0 101,0 102,60 105,60 106,130 110,130 112,210 117,210 119,290 125,290 127,420 73,420 75,290 81,290 83,210 88,210 90,130 94,130 95,60 98,60" />
+      <rect x="132" y="250" width="20" height="170" rx="2" />
+      <path d="M156 420V300l14-26 14 26v120z" />
+      <rect x="186" y="330" width="14" height="90" rx="2" />
+    </svg>
+  );
+}
 import { clearInfluencerClientData } from '../utils/influencerStorage';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
 
@@ -85,125 +104,203 @@ const handleLogin = async (e: React.FormEvent) => {
 };
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="bg-black rounded-2xl p-8 border border-gray-800">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-            <p className="text-gray-400">Sign in to your influencer account</p>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-violet-50 via-white to-fuchsia-50">
+      {/* Background: soft colour glows, white clouds along the bottom, gold sparkle under the card */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="absolute -left-24 top-1/3 h-80 w-[30rem] rounded-full bg-violet-100/70 blur-3xl" />
+        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-sky-100/80 blur-3xl" />
+        <div className="absolute left-1/3 top-1/4 h-72 w-72 rounded-full bg-amber-50/80 blur-3xl" />
+
+        {/* Puffy clouds: white tops shading into lavender so they read against the light background */}
+        {[
+          'bottom-[-7rem] -left-20 h-64 w-96',
+          'bottom-[-8rem] left-[14%] h-56 w-80',
+          'bottom-[-9rem] left-[38%] h-52 w-96',
+          'bottom-[-8rem] right-[18%] h-60 w-80',
+          'bottom-[-7rem] -right-20 h-72 w-[26rem]',
+        ].map((position) => (
+          <div
+            key={position}
+            className={`absolute ${position} rounded-full bg-gradient-to-b from-white to-violet-200/70 shadow-[0_-12px_40px_rgba(167,139,250,0.25)] blur-[2px]`}
+          />
+        ))}
+
+        <Sparkles className="absolute bottom-14 left-1/2 hidden h-9 w-9 -translate-x-1/2 fill-amber-300 text-amber-300 lg:block" />
+      </div>
+
+      <div className="relative mx-auto grid grid-cols-1 min-h-screen max-w-[1400px] items-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_minmax(0,520px)] lg:px-8 xl:grid-cols-[1fr_minmax(0,540px)_0.8fr] xl:gap-10">
+
+        {/* Left: brand + message */}
+        <aside className="relative hidden lg:block">
+          <DubaiSkyline className="pointer-events-none absolute -right-20 top-4 h-[520px] w-auto text-violet-300/30 [mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)]" />
+
+          <div className="relative">
+            <p className="text-4xl font-extrabold leading-none tracking-tight text-gray-900">OneHub</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.3em] text-gray-500">Influencer Marketing</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Email Address or Phone Number
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <Input
-                  type="text"
-                  placeholder="you@example.com or +91 9876543210"
-                  value={formData.loginId}
-                  onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
-                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pl-10"
-                  required
-                />
-              </div>
+          <p className="relative mt-10 text-xs font-medium uppercase tracking-[0.3em] text-gray-500">
+            Connect · Collaborate · Grow
+          </p>
+          <h2 className="relative mt-3 text-5xl font-extrabold leading-[1.05] tracking-tight text-gray-900 xl:text-6xl">
+            Your Creator
+            <br />
+            <span className="bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-400 bg-clip-text text-transparent">Journey</span>
+            <br />
+            Starts Here
+          </h2>
+          {/* Hand-drawn style underline */}
+          <svg viewBox="0 0 160 14" className="relative mt-2 ml-14 h-3.5 w-40 text-violet-400" aria-hidden="true">
+            <path d="M2 10 Q80 0 158 8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <p className="relative mt-6 max-w-md text-base leading-relaxed text-gray-600">
+            Join OneHub and collaborate with top brands, get exciting opportunities and grow your creativity into real impact.
+          </p>
+
+          <ul className="relative mt-8 space-y-5">
+            {[
+              { icon: Gift, title: 'Brand Collaborations', text: 'Work with leading brands across industries.', color: 'bg-violet-100 text-violet-600' },
+              { icon: BarChart3, title: 'Grow Your Influence', text: 'Reach new audiences and unlock opportunities.', color: 'bg-amber-100 text-amber-500' },
+              { icon: Heart, title: 'Earn & Get Rewarded', text: 'Monetize your content and turn passion into success.', color: 'bg-pink-100 text-pink-500' },
+            ].map(({ icon: BenefitIcon, title, text, color }) => (
+              <li key={title} className="flex items-center gap-4">
+                <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${color}`}>
+                  <BenefitIcon className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="font-bold text-gray-900">{title}</p>
+                  <p className="text-sm text-gray-500">{text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        {/* Centre: sign-in card */}
+        <div className="mx-auto w-full max-w-[540px]">
+          {/* Brand name on small screens, where the left panel is hidden */}
+          <p className="mb-5 text-center text-2xl font-extrabold tracking-tight text-gray-900 lg:hidden">OneHub</p>
+
+          <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-xl shadow-violet-200/40 backdrop-blur sm:p-10">
+            <div className="mb-8 text-center">
+              <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">Welcome Back</h1>
+              <p className="mt-2 text-gray-500">Sign in to your influencer account</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 pl-10 pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors cursor-pointer"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label htmlFor="login-id" className="mb-1.5 block text-sm font-medium text-gray-800">
+                  Email Address or Phone Number
+                </label>
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="login-id"
+                    type="text"
+                    autoComplete="username"
+                    placeholder="you@example.com or +971 50 123 4567"
+                    value={formData.loginId}
+                    onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
+                    className="h-12 rounded-xl border-gray-200 bg-white pl-12 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center justify-end">
-              <a href="/forgot-password?type=influencer" className="text-sm text-primary hover:underline cursor-pointer">
-                Forgot password?
-              </a>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-primary hover:bg-secondary text-white cursor-pointer"
-            >
-              Sign In
-            </Button>
-
-           { /* <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700" />
+              <div>
+                <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium text-gray-800">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="h-12 rounded-xl border-gray-200 bg-white pl-12 pr-12 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-black text-gray-400">Or continue with</span>
-              </div>
-            </div> */}
 
-           { /* <div className="grid grid-cols-2 gap-4">
+              <div className="flex justify-end">
+                <a href="/forgot-password?type=influencer" className="text-sm font-medium text-amber-600 hover:underline">
+                  Forgot password?
+                </a>
+              </div>
+
               <Button
-                type="button"
-                variant="outline"
-                className="border-gray-700 text-white hover:bg-gray-900"
+                type="submit"
+                className="h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-base font-semibold text-white shadow-lg shadow-violet-300/50 hover:from-violet-700 hover:to-purple-600"
               >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  />
-                </svg>
-                Google
+                Sign In
+                <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-gray-700 text-white hover:bg-gray-900"
-              >
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-                GitHub
-              </Button>
-            </div> */}
 
-            <p className="text-center text-sm text-gray-400">
-              Don't have an account?{' '}
-              <a href="/influencer-signup" className="text-primary hover:underline font-medium cursor-pointer">
-                Sign up as influencer
-              </a>
-            </p>
-          </form>
+              <div className="flex items-center gap-3 pt-2">
+                <span className="h-px flex-1 bg-gray-200" />
+                <p className="text-center text-sm text-gray-500 sm:whitespace-nowrap">
+                  Don't have an account?{' '}
+                  <a href="/influencer-signup" className="font-semibold text-amber-600 hover:underline">
+                    Sign up as influencer
+                  </a>
+                </p>
+                <span className="h-px flex-1 bg-gray-200" />
+              </div>
+            </form>
+          </div>
         </div>
+
+        {/* Right: creator photo with floating highlights */}
+        <aside className="relative hidden h-[680px] xl:block" aria-hidden="true">
+          {/* Main photo */}
+          <div className="absolute right-0 top-16 h-[360px] w-[250px] rotate-[8deg] overflow-hidden rounded-[2rem] border-[6px] border-white bg-violet-100 shadow-2xl shadow-violet-300/40">
+            <img src={creatorWoman} alt="" className="h-full w-full object-cover object-top" />
+          </div>
+
+          {/* Second photo, overlapping below */}
+          <div className="absolute bottom-6 left-6 h-[230px] w-[180px] rotate-[-8deg] overflow-hidden rounded-[1.75rem] border-[6px] border-white bg-violet-100 shadow-2xl shadow-violet-300/40">
+            <img src={creatorMan} alt="" className="h-full w-full object-cover object-top" />
+          </div>
+
+          <span className="absolute left-8 top-14 flex h-14 w-14 -rotate-6 items-center justify-center rounded-2xl bg-white shadow-lg shadow-violet-200/60">
+            <Instagram className="h-7 w-7 text-pink-500" />
+          </span>
+
+          <div className="absolute -right-4 top-[330px] flex -rotate-12 items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-lg shadow-violet-200/60">
+            <Heart className="h-6 w-6 fill-pink-500 text-pink-500" />
+            <p className="text-lg font-extrabold text-gray-900">12.8K</p>
+          </div>
+
+          <div className="absolute bottom-10 right-0 flex -rotate-6 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-lg shadow-violet-200/60">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-500">
+              <BarChart3 className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-lg font-extrabold leading-none text-gray-900">10K+</p>
+              <p className="text-xs text-gray-500">Creators</p>
+            </div>
+          </div>
+
+          {/* Paper plane with dashed gold trail */}
+          <svg viewBox="0 0 120 60" className="absolute right-6 top-2 h-12 w-24 text-amber-400" aria-hidden="true">
+            <path d="M4 56 Q50 54 96 16" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="5 5" strokeLinecap="round" />
+          </svg>
+          <Send className="absolute -right-2 -top-2 h-10 w-10 -rotate-12 fill-violet-300 text-violet-500" />
+          <Sparkles className="absolute left-1/2 top-8 h-8 w-8 fill-amber-300 text-amber-300" />
+          <Sparkles className="absolute left-0 top-[330px] h-6 w-6 fill-amber-300 text-amber-300" />
+        </aside>
       </div>
     </div>
   );

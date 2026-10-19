@@ -7,11 +7,49 @@ import {
   Clapperboard, Mountain, PawPrint, Camera, Palette, PersonStanding, Car, Flower2, Newspaper, Music,
   Smile, GraduationCap, Briefcase, CalendarDays, Users, Shirt, Utensils, Coffee, Gamepad2, Dumbbell,
   HeartPulse, ShieldPlus, Mic, Leaf, Sparkles, User, Music2, Podcast, Star, Droplet, Cpu, Plane,
-  Crown, Zap, BarChart3, Mail, Phone, Lock,
+  Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send,
 } from 'lucide-react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
+import { markInfluencerNewSignup } from '../utils/influencerStorage';
+import creatorPhoto from '../../assets/blog/content-creater.jpg';
+
+// Country codes for the phone field; UAE first, then the Gulf, then other common markets
+const DIAL_CODES = [
+  { country: 'United Arab Emirates', code: '+971', flag: '🇦🇪' },
+  { country: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
+  { country: 'Qatar', code: '+974', flag: '🇶🇦' },
+  { country: 'Kuwait', code: '+965', flag: '🇰🇼' },
+  { country: 'Bahrain', code: '+973', flag: '🇧🇭' },
+  { country: 'Oman', code: '+968', flag: '🇴🇲' },
+  { country: 'India', code: '+91', flag: '🇮🇳' },
+  { country: 'Pakistan', code: '+92', flag: '🇵🇰' },
+  { country: 'Bangladesh', code: '+880', flag: '🇧🇩' },
+  { country: 'Sri Lanka', code: '+94', flag: '🇱🇰' },
+  { country: 'Nepal', code: '+977', flag: '🇳🇵' },
+  { country: 'Philippines', code: '+63', flag: '🇵🇭' },
+  { country: 'Egypt', code: '+20', flag: '🇪🇬' },
+  { country: 'Jordan', code: '+962', flag: '🇯🇴' },
+  { country: 'Lebanon', code: '+961', flag: '🇱🇧' },
+  { country: 'Morocco', code: '+212', flag: '🇲🇦' },
+  { country: 'Turkey', code: '+90', flag: '🇹🇷' },
+  { country: 'United Kingdom', code: '+44', flag: '🇬🇧' },
+  { country: 'United States / Canada', code: '+1', flag: '🇺🇸' },
+  { country: 'France', code: '+33', flag: '🇫🇷' },
+  { country: 'Germany', code: '+49', flag: '🇩🇪' },
+  { country: 'Italy', code: '+39', flag: '🇮🇹' },
+  { country: 'Spain', code: '+34', flag: '🇪🇸' },
+  { country: 'Russia', code: '+7', flag: '🇷🇺' },
+  { country: 'China', code: '+86', flag: '🇨🇳' },
+  { country: 'Singapore', code: '+65', flag: '🇸🇬' },
+  { country: 'Malaysia', code: '+60', flag: '🇲🇾' },
+  { country: 'Indonesia', code: '+62', flag: '🇮🇩' },
+  { country: 'Australia', code: '+61', flag: '🇦🇺' },
+  { country: 'South Africa', code: '+27', flag: '🇿🇦' },
+  { country: 'Nigeria', code: '+234', flag: '🇳🇬' },
+  { country: 'Kenya', code: '+254', flag: '🇰🇪' },
+];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
@@ -145,6 +183,7 @@ export function InfluencerSignup() {
   }));
 
   const [step, setStep] = useState(1);
+  const [dialCode, setDialCode] = useState('+971');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -287,7 +326,7 @@ export function InfluencerSignup() {
           body: JSON.stringify({
             name: formData.fullName.trim(),
             email: formData.email.trim(),
-            phone: formData.phone.trim(),
+            phone: `${dialCode} ${formData.phone.trim()}`,
             password: formData.password,
             user_type_id: 3,
             terms_accepted: agreeTerms ? 1 : 0,
@@ -339,6 +378,7 @@ export function InfluencerSignup() {
         return;
       }
 
+      markInfluencerNewSignup();
       navigate('/influencer/dashboard');
     } catch (error) {
       console.error('Signup Error:', error);
@@ -349,19 +389,40 @@ export function InfluencerSignup() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-white">
-      {/* Soft background shapes on the account step */}
-      {step === 1 && (
+    <div className={`relative min-h-screen overflow-hidden bg-gradient-to-br from-violet-50 via-white to-fuchsia-50`}>
+      {/* Soft cloud shapes behind every step */}
+      {(
         <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-          <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full border-[48px] border-amber-50" />
-          <div className="absolute -bottom-40 -left-40 h-[28rem] w-[28rem] rounded-full border-[56px] border-amber-50" />
+          <div className="absolute -left-24 bottom-0 h-72 w-96 rounded-full bg-violet-100/70 blur-3xl" />
+          <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-fuchsia-100/70 blur-3xl" />
+          <div className="absolute bottom-[-6rem] right-1/4 h-64 w-[28rem] rounded-full bg-indigo-50 blur-3xl" />
+        </div>
+      )}
+      {/* Floating accents around the categories card (wide screens only) */}
+      {step === 2 && (
+        <div className="pointer-events-none absolute inset-0 hidden 2xl:block" aria-hidden="true">
+          <span className="absolute left-6 top-[34%] flex h-14 w-14 -rotate-12 items-center justify-center rounded-2xl bg-white shadow-lg shadow-violet-200/60">
+            <Instagram className="h-7 w-7 text-pink-500" />
+          </span>
+          <span className="absolute right-6 top-[46%] flex h-14 w-14 rotate-12 items-center justify-center rounded-2xl bg-white shadow-lg shadow-violet-200/60">
+            <Heart className="h-7 w-7 fill-pink-400 text-pink-400" />
+          </span>
+          <Sparkles className="absolute left-14 bottom-[22%] h-9 w-9 fill-amber-300 text-amber-300" />
+          <Sparkles className="absolute right-12 top-[24%] h-8 w-8 fill-amber-300 text-amber-300" />
+          <Sparkles className="absolute right-[20%] top-6 h-8 w-8 fill-amber-300 text-amber-300" />
+          <Send className="absolute right-[8%] top-4 h-12 w-12 -rotate-12 fill-violet-300 text-violet-500" />
         </div>
       )}
 
-      <div className={`relative ${step === 2 ? 'max-w-7xl' : step === 3 ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 sm:px-6 lg:px-8 py-10`}>
+      <div className={`relative ${step === 2 ? 'max-w-7xl' : step === 3 ? 'max-w-6xl' : 'max-w-[1400px]'} mx-auto px-4 sm:px-6 lg:px-8 py-10`}>
 
-        {/* Progress Indicator (step 3 shows its own inside the card) */}
-        <div className={`mx-auto mb-6 flex max-w-sm items-start justify-between ${step === 3 ? 'hidden' : ''}`}>
+        {/* Header for the categories step: logo + progress (steps 1 and 3 show their own) */}
+        <div className={`relative mb-6 ${step !== 2 ? 'hidden' : ''}`}>
+          <div className="mb-4 text-center lg:absolute lg:left-0 lg:top-1 lg:mb-0 lg:text-left">
+            <p className="text-3xl font-extrabold leading-none tracking-tight text-gray-900">OneHub</p>
+            <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.3em] text-gray-500">Influencer Marketing</p>
+          </div>
+        <div className="mx-auto flex max-w-sm items-start justify-between">
           {['Account', 'Categories', 'Connect'].map((label, index) => {
             const stepNumber = index + 1;
             const done = step > stepNumber;
@@ -369,132 +430,257 @@ export function InfluencerSignup() {
             return (
               <div key={label} className="relative flex flex-1 flex-col items-center">
                 {index > 0 && (
-                  <span className={`absolute right-1/2 top-4 h-0.5 w-full -translate-y-1/2 ${step >= stepNumber ? 'bg-primary' : 'bg-gray-200'}`} />
+                  <span className={`absolute right-1/2 top-[18px] h-0.5 w-full -translate-y-1/2 ${step >= stepNumber ? 'bg-violet-500' : 'bg-gray-200'}`} />
                 )}
                 <span
-                  className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-                    done || active ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'
+                  className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                    done || active ? 'bg-violet-600 text-white shadow-md shadow-violet-300' : 'bg-gray-100 text-gray-500'
                   }`}
                 >
                   {done ? <Check className="h-4 w-4" strokeWidth={3} /> : stepNumber}
                 </span>
-                <span className={`mt-1.5 text-xs ${active ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>{label}</span>
+                <span className={`mt-1.5 text-sm ${active ? 'font-bold text-violet-700' : done ? 'font-medium text-gray-800' : 'text-gray-400'}`}>{label}</span>
               </div>
             );
           })}
         </div>
+        </div>
 
         {/* ── STEP 1 ── */}
         {step === 1 && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Create Your Influencer Account</h1>
-                <p className="mt-1 text-sm text-gray-500">Join thousands of creators earning with brands.</p>
-              </div>
-              <div className="flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 sm:max-w-[260px]">
-                <Crown className="h-7 w-7 shrink-0 fill-amber-400 text-amber-500" />
-                <p className="text-xs leading-snug text-gray-700">Create your profile and start collaborating with top brands.</p>
+          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_minmax(0,520px)] xl:grid-cols-[1fr_minmax(0,540px)_1fr] xl:gap-10">
+
+            {/* Left: brand + benefits */}
+            <aside className="hidden lg:block">
+              <p className="text-3xl font-extrabold tracking-tight text-gray-900">OneHub</p>
+
+              <h2 className="mt-12 text-4xl font-extrabold leading-tight text-gray-900 xl:text-5xl">
+                <span className="bg-gradient-to-r from-fuchsia-500 to-violet-600 bg-clip-text text-transparent">Join</span>{' '}
+                <span className="text-violet-950">Our</span>
+                <br />
+                Creator Community
+              </h2>
+              <p className="mt-4 max-w-sm text-base leading-relaxed text-gray-500">
+                Get discovered by top brands, collaborate on exciting campaigns and grow your influence with OneHub.
+              </p>
+
+              <ul className="mt-8 space-y-5">
+                {[
+                  { icon: Gem, title: 'Work with Top Brands', text: 'Access exclusive brand collaborations', color: 'bg-violet-100 text-violet-600' },
+                  { icon: BarChart3, title: 'Grow Your Audience', text: 'Reach new followers and opportunities', color: 'bg-amber-100 text-amber-500' },
+                  { icon: Heart, title: 'Earn & Get Rewarded', text: 'Monetize your content and creativity', color: 'bg-pink-100 text-pink-500' },
+                ].map(({ icon: BenefitIcon, title, text, color }) => (
+                  <li key={title} className="flex items-center gap-4">
+                    <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${color}`}>
+                      <BenefitIcon className="h-6 w-6" />
+                    </span>
+                    <div>
+                      <p className="font-bold text-gray-900">{title}</p>
+                      <p className="text-sm text-gray-500">{text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+
+            {/* Centre: form card */}
+            <div className="mx-auto w-full max-w-[540px]">
+              {/* Brand name on small screens, where the left panel is hidden */}
+              <p className="mb-5 text-center text-2xl font-extrabold tracking-tight text-gray-900 lg:hidden">OneHub</p>
+
+              <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-xl shadow-violet-200/40 backdrop-blur sm:p-8">
+                {/* Progress */}
+                <div className="mx-auto mb-6 flex max-w-xs items-start justify-between">
+                  {['Account', 'Categories', 'Connect'].map((label, index) => (
+                    <div key={label} className="relative flex flex-1 flex-col items-center">
+                      {index > 0 && <span className="absolute right-1/2 top-4 h-0.5 w-full -translate-y-1/2 bg-gray-200" />}
+                      <span
+                        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
+                          index === 0 ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className={`mt-1.5 text-xs ${index === 0 ? 'font-semibold text-violet-700' : 'text-gray-500'}`}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mb-6 text-center">
+                  <h1 className="text-2xl font-bold text-gray-900 sm:text-[28px]">Create Your Influencer Account</h1>
+                  <p className="mt-1 text-sm text-gray-500">Join thousands of creators earning with brands.</p>
+                </div>
+
+                <div className="space-y-4">
+                  {[
+                    { key: 'fullName', label: 'Full Name', type: 'text', icon: User, placeholder: 'Enter your full name', autoComplete: 'name' },
+                    { key: 'email', label: 'Email Address', type: 'email', icon: Mail, placeholder: 'you@example.com', autoComplete: 'email' },
+                  ].map(({ key, label, type, icon: FieldIcon, placeholder, autoComplete }) => (
+                    <div key={key}>
+                      <label htmlFor={`signup-${key}`} className="mb-1.5 block text-sm font-medium text-gray-800">{label}</label>
+                      <div className="relative">
+                        <FieldIcon className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+                        <Input
+                          id={`signup-${key}`}
+                          type={type}
+                          autoComplete={autoComplete}
+                          placeholder={placeholder}
+                          value={formData[key as 'fullName' | 'email']}
+                          onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                          className="h-11 rounded-xl border-gray-200 bg-white pl-11 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Phone with country code */}
+                  <div>
+                    <label htmlFor="signup-phone" className="mb-1.5 block text-sm font-medium text-gray-800">Phone Number</label>
+                    <div className="flex h-11 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-violet-400 focus-within:ring-[3px] focus-within:ring-violet-200">
+                      <span className="flex items-center pl-3.5 pr-2 text-gray-400">
+                        <Phone className="h-[18px] w-[18px]" />
+                      </span>
+                      <select
+                        aria-label="Country code"
+                        value={dialCode}
+                        onChange={(e) => setDialCode(e.target.value)}
+                        className="border-r border-gray-200 bg-transparent pl-1 pr-2 text-sm font-medium text-gray-800 focus:outline-none"
+                      >
+                        {DIAL_CODES.map(({ code, country, flag }) => (
+                          <option key={`${country}-${code}`} value={code}>{flag} {code}</option>
+                        ))}
+                      </select>
+                      <input
+                        id="signup-phone"
+                        type="tel"
+                        autoComplete="tel-national"
+                        placeholder={dialCode === '+971' ? '50 123 4567' : 'Phone number'}
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="min-w-0 flex-1 bg-transparent px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {[
+                    { key: 'password', label: 'Password', placeholder: 'Create a strong password', show: showPassword, toggle: setShowPassword },
+                    { key: 'confirmPassword', label: 'Confirm Password', placeholder: 'Re-enter your password', show: showConfirmPassword, toggle: setShowConfirmPassword },
+                  ].map(({ key, label, placeholder, show, toggle }) => (
+                    <div key={key}>
+                      <label htmlFor={`signup-${key}`} className="mb-1.5 block text-sm font-medium text-gray-800">{label}</label>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+                        <Input
+                          id={`signup-${key}`}
+                          type={show ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          placeholder={placeholder}
+                          value={formData[key as 'password' | 'confirmPassword']}
+                          onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                          className="h-11 rounded-xl border-gray-200 bg-white pl-11 pr-11 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggle((prev) => !prev)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-700"
+                          aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+                        >
+                          {show ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    onClick={handleAccountNext}
+                    disabled={!formData.fullName.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.password || formData.password !== formData.confirmPassword}
+                    className="mt-2 h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-base font-semibold text-white hover:from-violet-700 hover:to-purple-600"
+                  >
+                    Continue
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <span className="h-px flex-1 bg-gray-200" />
+                    <p className="text-center text-sm text-gray-500 sm:whitespace-nowrap">
+                      Already have an account?{' '}
+                      <a href="/influencer/login" className="font-semibold text-violet-600 hover:underline">Sign in</a>
+                    </p>
+                    <span className="h-px flex-1 bg-gray-200" />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              {[
-                { key: 'fullName', label: 'Full Name', type: 'text', icon: User, placeholder: 'Enter your full name', autoComplete: 'name' },
-                { key: 'email', label: 'Email Address', type: 'email', icon: Mail, placeholder: 'you@example.com', autoComplete: 'email' },
-                { key: 'phone', label: 'Phone Number', type: 'tel', icon: Phone, placeholder: '+91 9876543210', autoComplete: 'tel' },
-              ].map(({ key, label, type, icon: FieldIcon, placeholder, autoComplete }) => (
-                <div key={key}>
-                  <label htmlFor={`signup-${key}`} className="mb-1.5 block text-sm font-medium text-gray-800">{label}</label>
-                  <div className="relative">
-                    <FieldIcon className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
-                    <Input
-                      id={`signup-${key}`}
-                      type={type}
-                      autoComplete={autoComplete}
-                      placeholder={placeholder}
-                      value={formData[key as 'fullName' | 'email' | 'phone']}
-                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                      className="h-11 border-gray-200 bg-white pl-11 text-gray-900 placeholder:text-gray-400"
-                    />
-                  </div>
-                </div>
-              ))}
-
-              {[
-                { key: 'password', label: 'Password', placeholder: 'Create a strong password', show: showPassword, toggle: setShowPassword },
-                { key: 'confirmPassword', label: 'Confirm Password', placeholder: 'Re-enter your password', show: showConfirmPassword, toggle: setShowConfirmPassword },
-              ].map(({ key, label, placeholder, show, toggle }) => (
-                <div key={key}>
-                  <label htmlFor={`signup-${key}`} className="mb-1.5 block text-sm font-medium text-gray-800">{label}</label>
-                  <div className="relative">
-                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
-                    <Input
-                      id={`signup-${key}`}
-                      type={show ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      placeholder={placeholder}
-                      value={formData[key as 'password' | 'confirmPassword']}
-                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                      className="h-11 border-gray-200 bg-white pl-11 pr-11 text-gray-900 placeholder:text-gray-400"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => toggle((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-400 transition-colors hover:text-gray-700"
-                      aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-                    >
-                      {show ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                onClick={handleAccountNext}
-                disabled={!formData.fullName.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.password || formData.password !== formData.confirmPassword}
-                className="mt-2 h-11 w-full gap-2 bg-primary font-semibold text-white hover:bg-secondary"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-
-              <div className="flex items-center gap-3 pt-1">
-                <span className="h-px flex-1 bg-gray-200" />
-                <p className="whitespace-nowrap text-sm text-gray-500">
-                  Already have an account?{' '}
-                  <a href="/influencer/login" className="font-semibold text-primary hover:underline">Sign in</a>
-                </p>
-                <span className="h-px flex-1 bg-gray-200" />
+            {/* Right: creator photo with floating highlights */}
+            <aside className="relative hidden h-[620px] xl:block" aria-hidden="true">
+              <div className="absolute right-4 top-24 h-[440px] w-[300px] rotate-3 overflow-hidden rounded-[2rem] border-8 border-white bg-amber-200 shadow-2xl shadow-violet-300/40">
+                <img src={creatorPhoto} alt="" className="h-full w-full object-cover object-[60%_center]" />
               </div>
-            </div>
+
+              <div className="absolute left-0 top-10 flex -rotate-6 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-lg shadow-violet-200/50">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                  <Users className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xl font-extrabold leading-none text-gray-900">10K+</p>
+                  <p className="text-xs text-gray-500">Active Creators</p>
+                </div>
+              </div>
+
+              <div className="absolute -right-2 top-[340px] flex -rotate-6 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-lg shadow-violet-200/50">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100 text-pink-500">
+                  <Heart className="h-5 w-5 fill-current" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Get Discovered</p>
+                  <p className="text-xs text-gray-500">By top brands</p>
+                </div>
+              </div>
+
+              <div className="absolute bottom-10 left-6 flex -rotate-6 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-lg shadow-violet-200/50">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-500">
+                  <BarChart3 className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Earn More</p>
+                  <p className="text-xs text-gray-500">With your content</p>
+                </div>
+              </div>
+
+              <Sparkles className="absolute right-0 top-0 h-8 w-8 fill-amber-300 text-amber-300" />
+              <Send className="absolute left-10 top-[300px] h-8 w-8 -rotate-12 fill-violet-200 text-violet-400" />
+            </aside>
           </div>
         )}
 
         {/* ── STEP 2 ── */}
         {step === 2 && (
-          <div className="bg-white rounded-xl border border-gray-200">
-            <div className="p-4 sm:p-5">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Select Your Primary Categories</h1>
-              <p className="mt-1 text-[13px] text-gray-500">
+          <div className="rounded-3xl border border-violet-100 bg-white/95 shadow-xl shadow-violet-200/40 backdrop-blur">
+            <div className="p-4 sm:p-8 sm:pb-6">
+              <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 sm:text-[32px]">
+                Select Your Primary{' '}
+                <span className="bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-400 bg-clip-text text-transparent">Categories</span>
+              </h1>
+              <p className="mt-1.5 text-sm text-gray-500 sm:text-base">
                 Choose all categories that apply to your content. This helps us show your profile to the right audience.
               </p>
 
-              <div className="relative mt-4 mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <div className="relative mt-5 mb-4">
+                <Search className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
                   value={categorySearch}
                   onChange={(e) => setCategorySearch(e.target.value)}
                   placeholder="Search categories... (e.g. Fashion, Travel, Fitness, Beauty)"
-                  className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-11 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-400 focus:outline-none focus:ring-[3px] focus:ring-violet-200"
                 />
               </div>
 
               {visibleCategories.length === 0 ? (
-                <p className="py-8 text-center text-[13px] text-gray-500">No categories match "{categorySearch}"</p>
+                <p className="py-8 text-center text-sm text-gray-500">No categories match "{categorySearch}"</p>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
                   {visibleCategories.map((category) => {
                     const Icon = category.icon;
                     const selected = selectedCategories.includes(category.id);
@@ -505,25 +691,25 @@ export function InfluencerSignup() {
                         onClick={() => toggleCategory(category.id)}
                         aria-pressed={selected}
                         title={category.name}
-                        className={`flex items-center gap-2 min-h-11 py-1.5 px-2.5 rounded-lg border text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        className={`flex min-h-[52px] items-center gap-2 rounded-xl border px-2.5 py-2 text-left sm:gap-2.5 sm:px-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
                           selected
-                            ? 'border-amber-300 bg-amber-50/70'
-                            : 'border-gray-200 bg-white hover:border-gray-300'
+                            ? 'border-violet-500 bg-violet-50 shadow-sm shadow-violet-200'
+                            : 'border-gray-200 bg-white hover:border-violet-200 hover:bg-violet-50/30'
                         }`}
                       >
-                        <span className={`flex items-center justify-center w-7 h-7 shrink-0 rounded-md ${category.color}`}>
-                          <Icon className="w-[18px] h-[18px]" />
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9 ${category.color}`}>
+                          <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
                         </span>
-                        {/* Long names wrap to a second line instead of being cut off */}
-                        <span className="flex-1 min-w-0 text-[12.5px] font-medium leading-tight text-gray-800 break-words">
+                        {/* Long names wrap to a second line instead of being cut off; on phones long words hyphenate properly */}
+                        <span lang="en" className="min-w-0 flex-1 hyphens-auto text-[11.5px] font-medium leading-tight text-gray-800 sm:text-[13px]">
                           {category.name}
                         </span>
                         <span
-                          className={`flex items-center justify-center w-4 h-4 shrink-0 rounded border transition-colors ${
-                            selected ? 'bg-primary border-primary text-white' : 'border-gray-300 bg-white'
+                          className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors ${
+                            selected ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-300 bg-white'
                           }`}
                         >
-                          {selected && <Check className="w-3 h-3" strokeWidth={3} />}
+                          {selected && <Check className="h-3 w-3" strokeWidth={3} />}
                         </span>
                       </button>
                     );
@@ -532,25 +718,25 @@ export function InfluencerSignup() {
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-gray-100">
+            <div className="mx-4 flex items-center justify-between gap-3 border-t border-gray-100 py-5 sm:mx-8">
               <Button
                 onClick={() => setStep(1)}
                 variant="outline"
-                className="h-10 px-5 sm:px-10 bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 gap-2 text-sm font-semibold"
+                className="h-11 gap-2 rounded-xl border border-gray-300 bg-white px-5 text-sm font-semibold text-gray-800 hover:bg-gray-50 sm:px-8"
               >
-                <ArrowLeft className="w-4 h-4" /> Back
+                <ArrowLeft className="h-4 w-4" /> Back
               </Button>
-              <p className="text-[13px] text-gray-500 whitespace-nowrap">
-                <span className="font-bold text-primary">{selectedCategories.length}</span>{' '}
+              <p className="whitespace-nowrap text-sm text-gray-500">
+                <span className="font-bold text-violet-600">{selectedCategories.length}</span>{' '}
                 {selectedCategories.length === 1 ? 'category' : 'categories'} selected
               </p>
               <Button
                 onClick={handleCategoriesNext}
                 disabled={selectedCategories.length === 0}
-                className="h-10 px-5 sm:px-12 bg-primary hover:bg-secondary text-white gap-2 text-sm font-semibold"
+                className="h-11 gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 px-6 text-sm font-semibold text-white shadow-lg shadow-violet-300/50 hover:from-violet-700 hover:to-purple-600 sm:px-12"
               >
                 Continue
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -558,14 +744,18 @@ export function InfluencerSignup() {
 
         {/* ── STEP 3 ── */}
         {step === 3 && (
-          <div className="grid lg:grid-cols-[300px_1fr] rounded-2xl border border-gray-200 bg-white overflow-hidden">
+          <div className="grid lg:grid-cols-[300px_1fr] rounded-3xl border border-violet-100 bg-white/95 shadow-xl shadow-violet-200/40 backdrop-blur overflow-hidden">
 
             {/* Left: intro panel */}
-            <aside className="hidden lg:flex flex-col bg-gradient-to-b from-amber-50 to-violet-50 p-7 border-r border-gray-100">
-              <span className="self-start rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+            <aside className="hidden lg:flex flex-col bg-gradient-to-b from-violet-100/70 via-fuchsia-50 to-violet-50 p-7 border-r border-violet-100">
+              <div className="mb-8">
+                <p className="text-3xl font-extrabold leading-none tracking-tight text-gray-900">OneHub</p>
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.3em] text-gray-500">Influencer Marketing</p>
+              </div>
+              <span className="self-start rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
                 Step 3 of 3
               </span>
-              <h2 className="mt-4 text-2xl font-bold leading-tight text-gray-900">Connect Your Social Accounts</h2>
+              <h2 className="mt-4 text-2xl font-extrabold leading-tight text-gray-900">Connect Your Social <span className="bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-400 bg-clip-text text-transparent">Accounts</span></h2>
               <p className="mt-2 text-[13px] leading-relaxed text-gray-500">
                 Link your social media profiles or add UGC portfolio to start creating and managing content from one place.
               </p>
@@ -615,11 +805,11 @@ export function InfluencerSignup() {
                 <div className="mx-auto flex max-w-sm items-start justify-between">
                   {['Account', 'Categories', 'Connect'].map((label, index) => (
                     <div key={label} className="relative flex flex-1 flex-col items-center">
-                      {index > 0 && <span className="absolute right-1/2 top-3.5 h-0.5 w-full -translate-y-1/2 bg-primary" />}
-                      <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
+                      {index > 0 && <span className="absolute right-1/2 top-3.5 h-0.5 w-full -translate-y-1/2 bg-violet-500" />}
+                      <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full bg-violet-600 text-xs font-semibold text-white shadow-md shadow-violet-300">
                         {index < 2 ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : 3}
                       </span>
-                      <span className={`mt-1.5 text-xs ${index === 2 ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>{label}</span>
+                      <span className={`mt-1.5 text-xs ${index === 2 ? 'font-bold text-violet-700' : 'font-medium text-gray-800'}`}>{label}</span>
                     </div>
                   ))}
                 </div>
@@ -631,7 +821,7 @@ export function InfluencerSignup() {
                     <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Connect Your Accounts</h1>
                     <p className="mt-1 text-[13px] text-gray-500">Link your social media profiles or add UGC portfolio</p>
                   </div>
-                  <div className="flex max-w-xs gap-2.5 rounded-lg bg-amber-50 px-3 py-2.5">
+                  <div className="flex max-w-xs gap-2.5 rounded-xl bg-violet-50 px-3 py-2.5">
                     <Crown className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
                     <div>
                       <p className="text-[13px] font-semibold text-gray-900">Set a primary account</p>
@@ -649,7 +839,7 @@ export function InfluencerSignup() {
                       <div
                         key={platform.id}
                         className={`flex flex-col gap-2.5 rounded-xl border px-3 py-2.5 transition-colors md:flex-row md:items-center md:gap-4 ${
-                          isPrimary ? 'border-amber-300 bg-amber-50/60' : 'border-gray-200 bg-white'
+                          isPrimary ? 'border-violet-400 bg-violet-50 shadow-sm shadow-violet-200' : 'border-gray-200 bg-white'
                         }`}
                       >
                         <div className="flex flex-1 items-center gap-3 md:flex-none md:shrink-0 md:w-52">
@@ -660,7 +850,7 @@ export function InfluencerSignup() {
                             <span className="flex items-center gap-1.5">
                               <span className="whitespace-nowrap text-sm font-semibold text-gray-900">{platform.name}</span>
                               {isPrimary && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
                                   <Crown className="h-3 w-3" /> Primary
                                 </span>
                               )}
@@ -680,7 +870,7 @@ export function InfluencerSignup() {
                               value={socialAccounts[platform.id] || ''}
                               onChange={(e) => handleSocialAccountChange(platform.id, e.target.value)}
                               aria-invalid={!!error}
-                              className={`h-10 bg-white text-[13px] text-gray-900 placeholder:text-gray-400 ${error ? 'border-red-400' : 'border-gray-200'}`}
+                              className={`h-10 rounded-xl bg-white text-[13px] text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200 ${error ? 'border-red-400' : 'border-gray-200'}`}
                             />
                             {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
                           </div>
@@ -690,8 +880,8 @@ export function InfluencerSignup() {
                             aria-pressed={isPrimary}
                             className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold transition-colors ${
                               isPrimary
-                                ? 'border-amber-400 bg-amber-400 text-white'
-                                : 'border-amber-300 bg-white text-gray-900 hover:bg-amber-50'
+                                ? 'border-violet-600 bg-violet-600 text-white'
+                                : 'border-violet-200 bg-white text-gray-900 hover:bg-violet-50'
                             }`}
                           >
                             <Crown className={`h-4 w-4 ${isPrimary ? 'fill-white' : 'fill-amber-400 text-amber-500'}`} />
@@ -704,7 +894,7 @@ export function InfluencerSignup() {
                 </div>
 
                 {/* Consent — both are required before Complete Signup */}
-                <div className="mt-4 space-y-3 rounded-xl border border-amber-100 bg-amber-50/50 p-3 sm:p-4">
+                <div className="mt-4 space-y-3 rounded-xl border border-violet-100 bg-violet-50/50 p-3 sm:p-4">
                   {[
                     {
                       id: 'consent-noc',
@@ -720,7 +910,7 @@ export function InfluencerSignup() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="font-medium text-amber-600 underline-offset-2 hover:underline"
+                            className="font-medium text-violet-600 underline-offset-2 hover:underline"
                           >
                             Terms &amp; Conditions
                           </a>{' '}
@@ -752,8 +942,8 @@ export function InfluencerSignup() {
                         className="peer sr-only"
                       />
                       <span
-                        className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30 ${
-                          checked ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'
+                        className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-violet-300 ${
+                          checked ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-300 bg-white'
                         }`}
                       >
                         {checked && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -772,14 +962,14 @@ export function InfluencerSignup() {
                   <Button
                     onClick={() => setStep(2)}
                     variant="outline"
-                    className="h-11 gap-2 border border-gray-300 bg-white text-sm font-semibold text-gray-800 hover:bg-gray-50 sm:w-44"
+                    className="h-11 gap-2 rounded-xl border border-gray-300 bg-white text-sm font-semibold text-gray-800 hover:bg-gray-50 sm:w-44"
                   >
                     <ArrowLeft className="h-4 w-4" /> Back
                   </Button>
                   <Button
                     onClick={handleSubmit}
                     disabled={loading || !agreeTerms || !agreePromotional}
-                    className="h-11 flex-1 gap-2 bg-primary text-sm font-semibold text-white hover:bg-secondary"
+                    className="h-11 flex-1 gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-sm font-semibold text-white shadow-lg shadow-violet-300/50 hover:from-violet-700 hover:to-purple-600"
                   >
                     {loading ? 'Completing...' : 'Complete Signup'}
                     <ArrowRight className="h-4 w-4" />

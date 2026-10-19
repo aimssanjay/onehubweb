@@ -4,7 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
   LayoutDashboard, User, Briefcase, MessageSquare, Settings, LogOut,
-  Instagram, Youtube, Video, TrendingUp, DollarSign, Eye, Heart,
+  Instagram, Youtube, Video, TrendingUp, Banknote, Eye, Heart,
   Edit, Camera, BarChart3, Menu, X, Bell,
   ChevronDown, MapPin, Mail, Phone, Check,
   ExternalLink, Search, Send,
@@ -16,6 +16,7 @@ import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
 import {
   clearInfluencerClientData,
   getInfluencerAnalyticsStorageKey,
+  isInfluencerNewSignup,
 } from '../utils/influencerStorage';
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
@@ -167,19 +168,37 @@ const PLATFORM_CONFIG = [
   { platformId: 4, name: 'UGC / Other', icon: Video, color: 'from-primary to-secondary' },
 ];
 
-// Country list
+// Country list: every country, with UAE pinned first. "UAE" keeps the spelling already saved on existing profiles.
 const COUNTRIES = [
-  'Afghanistan', 'Albania', 'Algeria', 'Argentina', 'Australia', 'Austria',
-  'Bangladesh', 'Belgium', 'Brazil', 'Canada', 'Chile', 'China', 'Colombia',
-  'Czech Republic', 'Denmark', 'Egypt', 'Ethiopia', 'Finland', 'France',
-  'Germany', 'Ghana', 'Greece', 'Hungary', 'India', 'Indonesia', 'Iran',
-  'Iraq', 'Ireland', 'Israel', 'Italy', 'Japan', 'Jordan', 'Kenya',
-  'Malaysia', 'Mexico', 'Morocco', 'Netherlands', 'New Zealand', 'Nigeria',
-  'Norway', 'Pakistan', 'Peru', 'Philippines', 'Poland', 'Portugal',
-  'Romania', 'Russia', 'Saudi Arabia', 'Singapore', 'South Africa',
-  'South Korea', 'Spain', 'Sri Lanka', 'Sweden', 'Switzerland', 'Thailand',
-  'Turkey', 'UAE', 'Ukraine', 'United Kingdom', 'United States', 'Vietnam',
+  'UAE',
+  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia',
+  'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium',
+  'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria',
+  'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia', 'Cameroon', 'Canada', 'Central African Republic', 'Chad',
+  'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica', "Côte d'Ivoire", 'Croatia', 'Cuba', 'Cyprus',
+  'Czech Republic', 'Democratic Republic of the Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic',
+  'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji',
+  'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala',
+  'Guinea', 'Guinea-Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hong Kong', 'Hungary', 'Iceland', 'India',
+  'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya',
+  'Kiribati', 'Kosovo', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya',
+  'Liechtenstein', 'Lithuania', 'Luxembourg', 'Macau', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali',
+  'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco',
+  'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal', 'Netherlands',
+  'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman',
+  'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland',
+  'Portugal', 'Puerto Rico', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia',
+  'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'São Tomé and Príncipe', 'Saudi Arabia', 'Senegal',
+  'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia',
+  'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden',
+  'Switzerland', 'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga',
+  'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Kingdom',
+  'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam', 'Yemen',
+  'Zambia', 'Zimbabwe',
 ];
+
+// Lets people find UAE by typing its full name too
+const COUNTRY_SEARCH_ALIASES: Record<string, string> = { UAE: 'united arab emirates' };
 
 // Mock data
 const mockCampaigns: Array<{
@@ -211,7 +230,7 @@ const mockMessages = [
 
 const mockNotifications = [
   { id: '1', brand: 'TechBrand', brandInitial: 'T', brandColor: 'bg-blue-600', message: '2 new campaign invites for your YouTube channel!', time: '2h ago', isNew: true },
-  { id: '2', brand: 'TechBrand', brandInitial: 'T', brandColor: 'bg-blue-700', message: '₹7,000 payment received! Check your earnings now.', time: '3h ago', isNew: true },
+  { id: '2', brand: 'TechBrand', brandInitial: 'T', brandColor: 'bg-blue-700', message: 'AED 7,000 payment received! Check your earnings now.', time: '3h ago', isNew: true },
   { id: '3', brand: 'Nike', brandInitial: 'N', brandColor: 'bg-black', message: 'Congrats! Your latest post has been approved.', time: '5h ago', isNew: true },
   { id: '4', brand: 'Lakme', brandInitial: 'L', brandColor: 'bg-pink-500', message: 'Lakme campaign approved! Time to get started.', time: '1d ago', isNew: false },
   { id: '5', brand: 'BeautyPlus', brandInitial: 'B', brandColor: 'bg-purple-500', message: '@llabeauty mentioned you in a post.', time: '2d ago', isNew: false },
@@ -347,6 +366,10 @@ export default function InfluencerDashboard() {
   const [messageText, setMessageText] = useState('');
   const [countrySearch, setCountrySearch] = useState('');
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  // True right after signup, so the header says "Welcome" instead of "Welcome back"
+  const [isNewSignup] = useState(() => isInfluencerNewSignup());
+  // Profile fields that failed the required check on the last save attempt
+  const [profileErrors, setProfileErrors] = useState<Record<string, boolean>>({});
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [analyticsData, setAnalyticsData] = useState<SharedAnalyticsData>(DEFAULT_ANALYTICS_DATA);
   const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
@@ -945,6 +968,7 @@ export default function InfluencerDashboard() {
   const resetEditState = () => {
     if (!userData) return;
     applyProfileData(userData);
+    setProfileErrors({});
     setIsEditing(false);
   };
 
@@ -1460,11 +1484,48 @@ export default function InfluencerDashboard() {
     );
   };
 
+  // Every profile field is mandatory; returns the ones that are missing or invalid
+  const getInvalidProfileFields = () => {
+    const price = Number(editForm.price_start);
+    const checks: { key: string; label: string; ok: boolean }[] = [
+      { key: 'name', label: 'Full Name', ok: !!editForm.name.trim() },
+      { key: 'phone', label: 'Phone', ok: /^[0-9+\-\s()]{7,20}$/.test(editForm.phone.trim()) },
+      { key: 'country', label: 'Country', ok: COUNTRIES.includes(editForm.country.trim()) },
+      { key: 'city', label: 'City', ok: !!editForm.city.trim() },
+      { key: 'gender', label: 'Gender', ok: !!editForm.gender },
+      { key: 'date_of_birth', label: 'Date of Birth', ok: !!normalizeDateInput(editForm.date_of_birth) },
+      { key: 'price_start', label: 'Base Price', ok: editForm.price_start !== '' && Number.isFinite(price) && price > 0 },
+      { key: 'bio', label: 'Bio', ok: !!editForm.bio.trim() },
+      { key: 'categories', label: 'Categories', ok: selectedCategoryIds.length > 0 },
+    ];
+    return checks.filter((check) => !check.ok);
+  };
+
+  // Once a field has been flagged, clear its red outline as soon as it becomes valid
+  useEffect(() => {
+    setProfileErrors((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const stillInvalid = new Set(getInvalidProfileFields().map(({ key }) => key));
+      return Object.fromEntries(Object.keys(prev).filter((key) => stillInvalid.has(key)).map((key) => [key, true]));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editForm, selectedCategoryIds]);
+
+  const errorBorder = (key: string) => (profileErrors[key] ? '!border-red-500' : '');
+
   // Save profile to API
   const handleSaveProfile = async () => {
     if (isSavingProfile) return;
     const token = localStorage.getItem('influencer_token');
     if (!token) return;
+
+    const failed = getInvalidProfileFields();
+    setProfileErrors(Object.fromEntries(failed.map(({ key }) => [key, true])));
+    if (failed.length > 0) {
+      toast.error(`Please complete: ${failed.map(({ label }) => label).join(', ')}`);
+      return;
+    }
+
     try {
       setIsSavingProfile(true);
       if (profileImageFile) {
@@ -1667,13 +1728,25 @@ export default function InfluencerDashboard() {
   };
 
   const filteredCountries = COUNTRIES.filter(c =>
-    c.toLowerCase().includes(countrySearch.toLowerCase())
+    `${c} ${COUNTRY_SEARCH_ALIASES[c] ?? ''}`.toLowerCase().includes(countrySearch.toLowerCase())
   );
   const femalePct = toPercentNumber(analyticsData.audienceGender.female);
   const malePct = toPercentNumber(analyticsData.audienceGender.male);
   const otherPct = toPercentNumber(analyticsData.audienceGender.other);
   const totalGenderPct = femalePct + malePct + otherPct;
   const joinedDateLabel = getJoinedDateLabel(userData);
+
+  // Title and badge come from the influencer's own categories instead of fixed sample text
+  const userCategoryNames: string[] = (userData?.categories || [])
+    .map((cat: any) => String(cat?.name ?? cat ?? '').trim())
+    .filter(Boolean);
+  const primaryCategory = userCategoryNames[0];
+  const creatorTitle = primaryCategory ? `${primaryCategory} Creator` : 'Content Creator';
+  const userBio = String(userData?.bio ?? '').trim();
+  const goToEditProfile = () => {
+    setActiveTab('profile');
+    setIsEditing(true);
+  };
   const overviewLocations = analyticsData.audienceLocation
     .filter((loc) => loc.country && (Number(loc.percentage) || 0) > 0)
     .slice(0, 4)
@@ -1776,7 +1849,7 @@ export default function InfluencerDashboard() {
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'campaigns', label: 'Campaigns', icon: Briefcase },
-    { id: 'earnings', label: 'Earnings', icon: DollarSign },
+    { id: 'earnings', label: 'Earnings', icon: Banknote },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -1870,12 +1943,21 @@ export default function InfluencerDashboard() {
         {/* Welcome Header */}
         <div className="mb-5">
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
-            Welcome back, {userData.name}! 👋
+            {isNewSignup ? `Welcome to OneHub, ${userData.name}! 🎉` : `Welcome back, ${userData.name}! 👋`}
           </h1>
+          {isNewSignup && (
+            <p className="text-sm text-gray-300 mb-2">
+              Your account is ready. Complete your profile so brands can discover you.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
-            <span className="text-primary font-semibold">Beauty Creator</span>
-            <span className="text-gray-500">•</span>
-            <span className="text-gray-400">Skincare & Makeup Influencer</span>
+            <span className="text-primary font-semibold">{creatorTitle}</span>
+            {userCategoryNames.length > 1 && (
+              <>
+                <span className="text-gray-500">•</span>
+                <span className="text-gray-400">{userCategoryNames.slice(1, 3).join(' & ')} Influencer</span>
+              </>
+            )}
             {userData.city && (
               <>
                 <span className="text-gray-500">•</span>
@@ -1889,20 +1971,23 @@ export default function InfluencerDashboard() {
           {/* Categories */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-gray-400 text-sm">Categories:</span>
-            {(userData.categories?.length > 0 ? userData.categories : [
-              { name: 'Beauty' }, { name: 'Skincare' }, { name: 'Makeup' }, { name: 'Lifestyle' }
-            ]).map((cat: any, i: number) => (
+            {userCategoryNames.map((name, i) => (
               <span key={i} className="px-3 py-1 bg-gray-800 border border-gray-700 text-white rounded-full text-xs font-medium">
-                {cat.name || cat}
+                {name}
               </span>
             ))}
+            {userCategoryNames.length === 0 && (
+              <button type="button" onClick={goToEditProfile} className="text-primary text-xs font-medium hover:underline">
+                Add your categories
+              </button>
+            )}
           </div>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           {[
-            { label: 'Total Earnings', value: '$0', change: '0%', icon: DollarSign, color: 'text-green-400', bg: 'bg-green-400/10' },
+            { label: 'Total Earnings', value: 'AED 0', change: '0%', icon: Banknote, color: 'text-green-400', bg: 'bg-green-400/10' },
             { label: 'Active Campaigns', value: '0', change: '0%', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-400/10' },
             { label: 'Total Reach', value: '0', change: '0%', icon: Eye, color: 'text-purple-400', bg: 'bg-purple-400/10' },
             { label: 'Engagement Rate', value: overviewEngagementRate, change: '0%', icon: Heart, color: 'text-pink-400', bg: 'bg-pink-400/10' },
@@ -2011,17 +2096,17 @@ export default function InfluencerDashboard() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-xs text-gray-400 mb-1">Total Earnings</p>
-                <p className="text-xl font-bold text-white">$0</p>
+                <p className="text-xl font-bold text-white">AED 0</p>
                 <p className="text-xs text-green-400 mt-1">↑ 0% this month</p>
               </div>
               <div className="space-y-2">
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-xs text-yellow-400 font-medium">Pending</p>
-                  <p className="text-lg font-bold text-white">$0</p>
+                  <p className="text-lg font-bold text-white">AED 0</p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-xs text-blue-400 font-medium">Available</p>
-                  <p className="text-lg font-bold text-white">$0</p>
+                  <p className="text-lg font-bold text-white">AED 0</p>
                 </div>
               </div>
             </div>
@@ -2058,13 +2143,23 @@ export default function InfluencerDashboard() {
             <p className="font-bold text-white text-lg">{userData.name}</p>
             <span className="text-blue-400 text-sm">✓</span>
           </div>
-          <p className="text-gray-400 text-xs mb-2">Beauty Creator</p>
-          <span className="inline-block px-3 py-1 bg-primary/20 text-primary rounded-full text-xs font-medium mb-3">
-            ▶ Beauty Influencer
-          </span>
-          <p className="text-gray-400 text-xs leading-relaxed mb-4">
-            {userData.bio || 'I create content around beauty, skincare, makeup & lifestyle. Let\'s collaborate! ✨'}
-          </p>
+          <p className="text-gray-400 text-xs mb-2">{creatorTitle}</p>
+          {primaryCategory && (
+            <span className="inline-block px-3 py-1 bg-primary/20 text-primary rounded-full text-xs font-medium mb-3">
+              ▶ {primaryCategory} Influencer
+            </span>
+          )}
+          {userBio ? (
+            <p className="text-gray-400 text-xs leading-relaxed mb-4 whitespace-pre-line">{userBio}</p>
+          ) : (
+            <button
+              type="button"
+              onClick={goToEditProfile}
+              className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-600 px-3 py-1.5 text-xs font-medium text-primary hover:border-primary"
+            >
+              <Edit className="w-3 h-3" /> Update your BIO
+            </button>
+          )}
 
           {/* Info */}
           <div className="space-y-1.5 text-xs text-gray-400 text-left mb-4">
@@ -2088,13 +2183,16 @@ export default function InfluencerDashboard() {
           <div className="mb-4">
             <p className="text-xs font-medium text-gray-400 text-left mb-2">Categories</p>
             <div className="flex flex-wrap gap-1">
-              {(userData.categories?.length > 0 ? userData.categories : [
-                { name: 'Beauty' }, { name: 'Skincare' }, { name: 'Makeup' }, { name: 'Lifestyle' }
-              ]).map((cat: any, i: number) => (
+              {userCategoryNames.map((name, i) => (
                 <span key={i} className="px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-300 rounded-full text-xs">
-                  {cat.name || cat}
+                  {name}
                 </span>
               ))}
+              {userCategoryNames.length === 0 && (
+                <button type="button" onClick={goToEditProfile} className="text-primary text-xs font-medium hover:underline">
+                  Add your categories
+                </button>
+              )}
             </div>
           </div>
 
@@ -2225,7 +2323,7 @@ export default function InfluencerDashboard() {
                       <div className="flex-1">
                         {isEditing ? (
                           <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="bg-gray-800 border-gray-700 text-white text-lg font-bold mb-2" placeholder="Full Name" />
+                            className={`bg-gray-800 border-gray-700 text-white text-lg font-bold mb-2 ${errorBorder('name')}`} placeholder="Full Name *" aria-required="true" />
                         ) : (
                           <h2 className="text-xl font-bold text-white mb-1">{userData.name}</h2>
                         )}
@@ -2243,10 +2341,10 @@ export default function InfluencerDashboard() {
                         <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.email}</p>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Phone</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Phone <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                            className="bg-gray-800 border-gray-700 text-white" placeholder="+1 (555) 000-0000" type="tel" />
+                            className={`bg-gray-800 border-gray-700 text-white ${errorBorder('phone')}`} placeholder="+971 50 123 4567" type="tel" aria-required="true" />
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.phone || 'Not provided'}</p>
                         )}
@@ -2254,7 +2352,7 @@ export default function InfluencerDashboard() {
 
                       {/* ✅ Country with dropdown + search */}
                       <div className="relative">
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Country</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Country <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <div className="relative">
                             <Input
@@ -2265,8 +2363,9 @@ export default function InfluencerDashboard() {
                                 setShowCountryDropdown(true);
                               }}
                               onFocus={() => setShowCountryDropdown(true)}
-                              className="bg-gray-800 border-gray-700 text-white"
+                              className={`bg-gray-800 border-gray-700 text-white ${errorBorder('country')}`}
                               placeholder="Type or select country"
+                              aria-required="true"
                             />
                             {showCountryDropdown && filteredCountries.length > 0 && (
                               <div className="absolute top-full left-0 right-0 z-50 bg-gray-800 border border-gray-700 rounded-lg mt-1 max-h-48 overflow-y-auto shadow-xl">
@@ -2290,22 +2389,23 @@ export default function InfluencerDashboard() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">City</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">City <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <Input value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                            className="bg-gray-800 border-gray-700 text-white" placeholder="City" />
+                            className={`bg-gray-800 border-gray-700 text-white ${errorBorder('city')}`} placeholder="City" aria-required="true" />
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.city || 'Not provided'}</p>
                         )}
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Gender</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Gender <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <select
                             value={editForm.gender}
                             onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
-                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary"
+                            aria-required="true"
+                            className={`w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary ${errorBorder('gender')}`}
                           >
                             <option value="">Select gender</option>
                             <option value="male">Male</option>
@@ -2320,12 +2420,13 @@ export default function InfluencerDashboard() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Date of Birth</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <Input
                             value={normalizeDateInput(editForm.date_of_birth)}
                             onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
-                            className="bg-gray-800 border-gray-700 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-90 [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:saturate-[8] [&::-webkit-calendar-picker-indicator]:hue-rotate-[345deg]"
+                            aria-required="true"
+                            className={`${errorBorder('date_of_birth')} bg-gray-800 border-gray-700 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-90 [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:saturate-[8] [&::-webkit-calendar-picker-indicator]:hue-rotate-[345deg]`}
                             type="date"
                           />
                         ) : (
@@ -2336,14 +2437,15 @@ export default function InfluencerDashboard() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Base Price (USD)</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Base Price (AED) <span className="text-red-500">*</span></label>
                         {isEditing ? (
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">AED</span>
                             <Input
                               value={editForm.price_start}
                               onChange={(e) => setEditForm({ ...editForm, price_start: e.target.value })}
-                              className="bg-gray-800 border-gray-700 text-white pl-8"
+                              className={`bg-gray-800 border-gray-700 text-white pl-12 ${errorBorder('price_start')}`}
+                              aria-required="true"
                               type="number"
                               min="0"
                               step="0.01"
@@ -2353,10 +2455,10 @@ export default function InfluencerDashboard() {
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">
                             {(userData.price_start != null && userData.price_start !== '')
-                              ? `$${userData.price_start}`
+                              ? `AED ${userData.price_start}`
                               : (userData.base_price != null && userData.base_price !== '')
-                                ? `$${userData.base_price}`
-                                : (editForm.price_start ? `$${editForm.price_start}` : 'Not provided')}
+                                ? `AED ${userData.base_price}`
+                                : (editForm.price_start ? `AED ${editForm.price_start}` : 'Not provided')}
                           </p>
                         )}
                       </div>
@@ -2364,11 +2466,12 @@ export default function InfluencerDashboard() {
 
                     {/* Bio */}
                     <div className="mb-4">
-                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Bio</label>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Bio <span className="text-red-500">*</span></label>
                       {isEditing ? (
                         <textarea rows={4} value={editForm.bio}
                           onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                          aria-required="true"
+                          className={`w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary resize-none ${errorBorder('bio')}`}
                           placeholder="Tell brands about yourself..." />
                       ) : (
                         <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5 leading-relaxed">
@@ -2378,9 +2481,9 @@ export default function InfluencerDashboard() {
                     </div>
 
                     <div className="mb-4">
-                      <label className="block text-xs font-medium text-gray-400 mb-2">Categories</label>
+                      <label className="block text-xs font-medium text-gray-400 mb-2">Categories <span className="text-red-500">*</span></label>
                       {isEditing ? (
-                        <div className="flex flex-wrap gap-2">
+                        <div className={`flex flex-wrap gap-2 ${profileErrors.categories ? 'rounded-lg ring-1 ring-red-500 p-2' : ''}`}>
                           {apiCategories.map((category) => (
                             <button
                               key={category.id}
@@ -2714,7 +2817,7 @@ export default function InfluencerDashboard() {
                 <div className="space-y-4">
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <h3 className="font-bold text-white mb-3">Rate Card</h3>
-                    {[{ type: 'Reel', price: '₹5,000', icon: '▶' }, { type: 'Post', price: '₹8,000', icon: '📷' }].map((r) => (
+                    {[{ type: 'Reel', price: 'AED 5,000', icon: '▶' }, { type: 'Post', price: 'AED 8,000', icon: '📷' }].map((r) => (
                       <div key={r.type} className="flex items-center justify-between bg-gray-800 rounded-lg p-3 mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{r.icon}</span>
@@ -2762,9 +2865,9 @@ export default function InfluencerDashboard() {
               <h1 className="text-2xl font-bold text-white mb-6">Earnings</h1>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {[
-                  { label: 'Total Earnings', value: '$0', sub: 'No earnings yet', color: 'text-green-400' },
-                  { label: 'Pending', value: '$0', sub: 'Awaiting payment', color: 'text-yellow-400' },
-                  { label: 'Available', value: '$0', sub: 'Ready to withdraw', color: 'text-blue-400' },
+                  { label: 'Total Earnings', value: 'AED 0', sub: 'No earnings yet', color: 'text-green-400' },
+                  { label: 'Pending', value: 'AED 0', sub: 'Awaiting payment', color: 'text-yellow-400' },
+                  { label: 'Available', value: 'AED 0', sub: 'Ready to withdraw', color: 'text-blue-400' },
                 ].map((e) => (
                   <div key={e.label} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                     <p className="text-gray-400 text-sm mb-1">{e.label}</p>

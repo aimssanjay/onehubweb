@@ -37,7 +37,32 @@ export function getInfluencerAnalyticsSavedKey() {
   return `${LEGACY_ANALYTICS_SAVED_KEY}:${getInfluencerScope()}`;
 }
 
+// Set right after signup so the dashboard greets a brand-new influencer differently.
+// Session-scoped: it lasts until the tab closes or the influencer logs out.
+const NEW_SIGNUP_KEY = 'influencer_new_signup';
+
+export function markInfluencerNewSignup() {
+  try {
+    sessionStorage.setItem(NEW_SIGNUP_KEY, '1');
+  } catch {
+    // Storage unavailable (e.g. private mode); the dashboard falls back to "Welcome back"
+  }
+}
+
+export function isInfluencerNewSignup() {
+  try {
+    return sessionStorage.getItem(NEW_SIGNUP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function clearInfluencerClientData() {
+  try {
+    sessionStorage.removeItem(NEW_SIGNUP_KEY);
+  } catch {
+    // ignore
+  }
   localStorage.removeItem('influencer_token');
   localStorage.removeItem('influencer_user');
   localStorage.removeItem(LEGACY_ANALYTICS_KEY);
