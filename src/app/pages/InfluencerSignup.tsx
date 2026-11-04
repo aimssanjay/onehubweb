@@ -7,7 +7,7 @@ import {
   Clapperboard, Mountain, PawPrint, Camera, Palette, PersonStanding, Car, Flower2, Newspaper, Music,
   Smile, GraduationCap, Briefcase, CalendarDays, Users, Shirt, Utensils, Coffee, Gamepad2, Dumbbell,
   HeartPulse, ShieldPlus, Mic, Leaf, Sparkles, User, Music2, Podcast, Star, Droplet, Cpu, Plane,
-  Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send,
+  Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send, Handshake,
 } from 'lucide-react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
@@ -194,6 +194,8 @@ export function InfluencerSignup() {
   // Both consents are mandatory before Complete Signup
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePromotional, setAgreePromotional] = useState(false);
+  // Barter collaborations: unanswered until the influencer picks Yes or No
+  const [openToBarter, setOpenToBarter] = useState<'yes' | 'no' | null>(null);
   // Set once the account is created on final submit, so a retry doesn't register twice
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -332,6 +334,7 @@ export function InfluencerSignup() {
             terms_accepted: agreeTerms ? 1 : 0,
             promotional_updates_consent: agreePromotional ? 1 : 0,
             primary_platform_id: primaryPlatformId,
+            ...(openToBarter ? { accepts_barter: openToBarter === 'yes' ? 1 : 0 } : {}),
           }),
         });
         const data = await response.json();
@@ -957,6 +960,46 @@ export function InfluencerSignup() {
                     </label>
                   ))}
                 </div>
+
+                {/* Collaboration preferences: one choice only (radio group), nothing selected by default */}
+                <fieldset className="mt-4 rounded-xl border border-violet-100 bg-violet-50/70 p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <Handshake className="mt-0.5 h-7 w-7 shrink-0 text-violet-600" aria-hidden="true" />
+                    <div>
+                      <legend className="text-base font-bold text-gray-900">Collaboration Preferences</legend>
+                      <p className="text-[13px] text-gray-500">Tell brands what types of collaborations you are open to.</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:gap-8 sm:pl-10">
+                    {[
+                      { value: 'yes' as const, title: 'Yes', text: 'I am open to barter collaborations' },
+                      { value: 'no' as const, title: 'No', text: 'I am not open to barter collaborations' },
+                    ].map(({ value, title, text }) => (
+                      <label key={value} className="flex cursor-pointer items-center gap-2.5 text-sm text-gray-700">
+                        <input
+                          type="radio"
+                          name="barter-collaborations"
+                          value={value}
+                          checked={openToBarter === value}
+                          onChange={() => setOpenToBarter(value)}
+                          className="peer sr-only"
+                        />
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-violet-300 ${
+                            openToBarter === value ? 'border-violet-600' : 'border-gray-300'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {openToBarter === value && <span className="h-2.5 w-2.5 rounded-full bg-violet-600" />}
+                        </span>
+                        <span>
+                          <span className="font-semibold text-gray-900">{title}</span> – {text}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
                 <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:gap-4">
                   <Button

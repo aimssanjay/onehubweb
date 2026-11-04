@@ -7,12 +7,20 @@ import {
   Instagram, Youtube, Video, TrendingUp, Banknote, Eye, Heart,
   Edit, Camera, BarChart3, Menu, X, Bell,
   ChevronDown, MapPin, Mail, Phone, Check,
-  ExternalLink, Search, Send,
+  ExternalLink, Search, Send, Handshake, CheckCircle2, XCircle, HelpCircle,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
 import { useCategories } from '../hooks/useCategories';
 import { toast } from 'sonner';
 import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
+import { SearchableSelect } from '../components/SearchableSelect';
+import {
+  COUNTRIES,
+  COUNTRY_SEARCH_ALIASES,
+  CITIES_BY_COUNTRY,
+  NATIONALITIES,
+  NATIONALITY_SEARCH_ALIASES,
+} from '../data/locations';
 import {
   clearInfluencerClientData,
   getInfluencerAnalyticsStorageKey,
@@ -21,6 +29,21 @@ import {
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
   'notifications' | 'analytics' | 'settings';
+
+type BarterPreference = '' | 'yes' | 'no';
+
+// API may return the barter flag as 1/0, true/false or "yes"/"no"; '' means not set yet
+const toBarterPreference = (value: unknown): BarterPreference => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['1', 'true', 'yes'].includes(normalized)) return 'yes';
+  if (['0', 'false', 'no'].includes(normalized)) return 'no';
+  return '';
+};
+
+const BARTER_OPTIONS: { value: Exclude<BarterPreference, ''>; label: string }[] = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+];
 
 type SharedAnalyticsData = {
   instagram: { followers: string; avgViews: string; engagement: string };
@@ -168,37 +191,6 @@ const PLATFORM_CONFIG = [
   { platformId: 4, name: 'UGC / Other', icon: Video, color: 'from-primary to-secondary' },
 ];
 
-// Country list: every country, with UAE pinned first. "UAE" keeps the spelling already saved on existing profiles.
-const COUNTRIES = [
-  'UAE',
-  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia',
-  'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium',
-  'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria',
-  'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia', 'Cameroon', 'Canada', 'Central African Republic', 'Chad',
-  'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica', "Côte d'Ivoire", 'Croatia', 'Cuba', 'Cyprus',
-  'Czech Republic', 'Democratic Republic of the Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic',
-  'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji',
-  'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala',
-  'Guinea', 'Guinea-Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hong Kong', 'Hungary', 'Iceland', 'India',
-  'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya',
-  'Kiribati', 'Kosovo', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya',
-  'Liechtenstein', 'Lithuania', 'Luxembourg', 'Macau', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali',
-  'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco',
-  'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal', 'Netherlands',
-  'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman',
-  'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland',
-  'Portugal', 'Puerto Rico', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia',
-  'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'São Tomé and Príncipe', 'Saudi Arabia', 'Senegal',
-  'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia',
-  'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden',
-  'Switzerland', 'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga',
-  'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Kingdom',
-  'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam', 'Yemen',
-  'Zambia', 'Zimbabwe',
-];
-
-// Lets people find UAE by typing its full name too
-const COUNTRY_SEARCH_ALIASES: Record<string, string> = { UAE: 'united arab emirates' };
 
 // Mock data
 const mockCampaigns: Array<{
@@ -364,8 +356,6 @@ export default function InfluencerDashboard() {
   const [campaignsSubTab, setCampaignsSubTab] = useState<'available' | 'applied' | 'ongoing' | 'completed'>('available');
   const [selectedConversation, setSelectedConversation] = useState(mockMessages[0]);
   const [messageText, setMessageText] = useState('');
-  const [countrySearch, setCountrySearch] = useState('');
-  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   // True right after signup, so the header says "Welcome" instead of "Welcome back"
   const [isNewSignup] = useState(() => isInfluencerNewSignup());
   // Profile fields that failed the required check on the last save attempt
@@ -392,7 +382,8 @@ export default function InfluencerDashboard() {
 
   // Edit form state
   const [editForm, setEditForm] = useState({
-    name: '', phone: '', country: '', city: '', bio: '', gender: '', date_of_birth: '', price_start: '',
+    name: '', phone: '', country: '', city: '', nationality: '', bio: '', gender: '', date_of_birth: '', price_start: '',
+    accepts_barter: '' as BarterPreference,
   });
 
   const normalizeDateInput = (value: string) => {
@@ -891,6 +882,8 @@ export default function InfluencerDashboard() {
       phone: data.phone || '',
       country: data.country || '',
       city: data.city || '',
+      nationality: data.nationality || '',
+      accepts_barter: toBarterPreference(data.accepts_barter),
       bio: data.bio || '',
       gender: data.gender || '',
       date_of_birth: normalizeDateInput(data.date_of_birth || data.dob || ''),
@@ -1492,6 +1485,7 @@ export default function InfluencerDashboard() {
       { key: 'phone', label: 'Phone', ok: /^[0-9+\-\s()]{7,20}$/.test(editForm.phone.trim()) },
       { key: 'country', label: 'Country', ok: COUNTRIES.includes(editForm.country.trim()) },
       { key: 'city', label: 'City', ok: !!editForm.city.trim() },
+      { key: 'nationality', label: 'Nationality', ok: NATIONALITIES.includes(editForm.nationality.trim()) },
       { key: 'gender', label: 'Gender', ok: !!editForm.gender },
       { key: 'date_of_birth', label: 'Date of Birth', ok: !!normalizeDateInput(editForm.date_of_birth) },
       { key: 'price_start', label: 'Base Price', ok: editForm.price_start !== '' && Number.isFinite(price) && price > 0 },
@@ -1566,6 +1560,12 @@ export default function InfluencerDashboard() {
         profilePayload.country = countryValue;
       } else if (editForm.country.trim()) {
         profilePayload.country = editForm.country.trim();
+      }
+
+      profilePayload.nationality = editForm.nationality.trim();
+
+      if (editForm.accepts_barter) {
+        profilePayload.accepts_barter = editForm.accepts_barter === 'yes' ? 1 : 0;
       }
 
       if (cityValue !== undefined) {
@@ -1727,9 +1727,8 @@ export default function InfluencerDashboard() {
     }
   };
 
-  const filteredCountries = COUNTRIES.filter(c =>
-    `${c} ${COUNTRY_SEARCH_ALIASES[c] ?? ''}`.toLowerCase().includes(countrySearch.toLowerCase())
-  );
+  // Cities for the selected country; countries without a list let the influencer type their city
+  const cityOptions = CITIES_BY_COUNTRY[editForm.country] ?? [];
   const femalePct = toPercentNumber(analyticsData.audienceGender.female);
   const malePct = toPercentNumber(analyticsData.audienceGender.male);
   const otherPct = toPercentNumber(analyticsData.audienceGender.other);
@@ -1983,6 +1982,44 @@ export default function InfluencerDashboard() {
             )}
           </div>
         </div>
+
+        {/* Collaboration Preference (view only; edited in My Profile) */}
+        {(() => {
+          const barter = toBarterPreference(userData.accepts_barter);
+          const status = {
+            yes: { text: 'Open to Barter Collaborations', icon: CheckCircle2, pill: 'bg-green-500/10 text-green-400 border-green-500/30' },
+            no: { text: 'Not Open to Barter Collaborations', icon: XCircle, pill: 'bg-red-500/10 text-red-400 border-red-500/30' },
+            '': { text: 'Preference not set', icon: HelpCircle, pill: 'bg-gray-800 text-gray-400 border-gray-700' },
+          }[barter];
+          const StatusIcon = status.icon;
+          return (
+            <section
+              aria-label="Collaboration Preference"
+              className="relative mb-5 overflow-hidden rounded-xl border border-gray-800 bg-gradient-to-r from-gray-900 via-gray-900 to-primary/10 p-4 sm:p-5"
+            >
+              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
+              <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                    <Handshake className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-white">Collaboration Preference</h2>
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      {barter
+                        ? 'Brands see this when considering product-for-content (barter) deals.'
+                        : 'You can set your barter preference in My Profile.'}
+                    </p>
+                  </div>
+                </div>
+                <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${status.pill}`}>
+                  <StatusIcon className="h-4 w-4" />
+                  {status.text}
+                </span>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
@@ -2350,51 +2387,69 @@ export default function InfluencerDashboard() {
                         )}
                       </div>
 
-                      {/* ✅ Country with dropdown + search */}
-                      <div className="relative">
+                      {/* Country: searchable list of every country */}
+                      <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1.5">Country <span className="text-red-500">*</span></label>
                         {isEditing ? (
-                          <div className="relative">
-                            <Input
-                              value={editForm.country}
-                              onChange={(e) => {
-                                setEditForm({ ...editForm, country: e.target.value });
-                                setCountrySearch(e.target.value);
-                                setShowCountryDropdown(true);
-                              }}
-                              onFocus={() => setShowCountryDropdown(true)}
-                              className={`bg-gray-800 border-gray-700 text-white ${errorBorder('country')}`}
-                              placeholder="Type or select country"
-                              aria-required="true"
-                            />
-                            {showCountryDropdown && filteredCountries.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 z-50 bg-gray-800 border border-gray-700 rounded-lg mt-1 max-h-48 overflow-y-auto shadow-xl">
-                                {filteredCountries.map((country) => (
-                                  <button key={country} type="button"
-                                    onClick={() => {
-                                      setEditForm({ ...editForm, country });
-                                      setCountrySearch(country);
-                                      setShowCountryDropdown(false);
-                                    }}
-                                    className="w-full text-left px-3 py-2 text-white text-sm hover:bg-gray-700 transition-colors">
-                                    {country}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          <SearchableSelect
+                            aria-label="Country"
+                            value={editForm.country}
+                            options={COUNTRIES}
+                            searchAliases={COUNTRY_SEARCH_ALIASES}
+                            placeholder="Select country"
+                            searchPlaceholder="Search country..."
+                            invalid={!!profileErrors.country}
+                            onChange={(country) =>
+                              // Keep the city only if it belongs to the newly selected country
+                              setEditForm((prev) => ({
+                                ...prev,
+                                country,
+                                city: (CITIES_BY_COUNTRY[country] ?? []).includes(prev.city) ? prev.city : '',
+                              }))
+                            }
+                          />
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.country || 'Not provided'}</p>
                         )}
                       </div>
 
+                      {/* City: loads the selected country's cities */}
                       <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1.5">City <span className="text-red-500">*</span></label>
                         {isEditing ? (
-                          <Input value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                            className={`bg-gray-800 border-gray-700 text-white ${errorBorder('city')}`} placeholder="City" aria-required="true" />
+                          <SearchableSelect
+                            aria-label="City"
+                            value={editForm.city}
+                            options={cityOptions}
+                            allowCustom
+                            disabled={!editForm.country}
+                            placeholder={editForm.country ? 'Select city' : 'Select a country first'}
+                            searchPlaceholder={cityOptions.length ? 'Search city...' : 'Type your city...'}
+                            emptyText={cityOptions.length ? 'No matching city' : 'Type your city name above'}
+                            invalid={!!profileErrors.city}
+                            onChange={(city) => setEditForm((prev) => ({ ...prev, city }))}
+                          />
                         ) : (
                           <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.city || 'Not provided'}</p>
+                        )}
+                      </div>
+
+                      {/* Nationality: searchable list */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Nationality <span className="text-red-500">*</span></label>
+                        {isEditing ? (
+                          <SearchableSelect
+                            aria-label="Nationality"
+                            value={editForm.nationality}
+                            options={NATIONALITIES}
+                            searchAliases={NATIONALITY_SEARCH_ALIASES}
+                            placeholder="Select nationality"
+                            searchPlaceholder="Search nationality or country..."
+                            invalid={!!profileErrors.nationality}
+                            onChange={(nationality) => setEditForm((prev) => ({ ...prev, nationality }))}
+                          />
+                        ) : (
+                          <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">{userData.nationality || 'Not provided'}</p>
                         )}
                       </div>
 
@@ -2463,6 +2518,52 @@ export default function InfluencerDashboard() {
                         )}
                       </div>
                     </div>
+
+                    {/* Collaboration Preference: editable only here */}
+                    <fieldset className="mb-4">
+                      <legend className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                        <Handshake className="h-3.5 w-3.5 text-primary" /> Collaboration Preference
+                      </legend>
+                      {isEditing ? (
+                        <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {BARTER_OPTIONS.map(({ value, label }) => {
+                            const checked = editForm.accepts_barter === value;
+                            return (
+                              <label
+                                key={value}
+                                className={`flex cursor-pointer items-center gap-3 rounded-lg border bg-gray-800 px-3 py-2.5 text-sm transition-colors ${
+                                  checked ? 'border-primary text-white' : 'border-gray-700 text-gray-300 hover:border-gray-600'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="profile-barter"
+                                  value={value}
+                                  checked={checked}
+                                  onChange={() => setEditForm((prev) => ({ ...prev, accepts_barter: value }))}
+                                  className="sr-only"
+                                />
+                                <span
+                                  aria-hidden="true"
+                                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${checked ? 'border-primary' : 'border-gray-500'}`}
+                                >
+                                  {checked && <span className="h-2 w-2 rounded-full bg-primary" />}
+                                </span>
+                                {label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-white text-sm bg-gray-800 rounded-lg px-3 py-2.5">
+                          {{
+                            yes: 'Open to Barter Collaborations',
+                            no: 'Not Open to Barter Collaborations',
+                            '': 'Not provided',
+                          }[toBarterPreference(userData.accepts_barter)]}
+                        </p>
+                      )}
+                    </fieldset>
 
                     {/* Bio */}
                     <div className="mb-4">
