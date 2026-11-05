@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Instagram, Music, Youtube, Edit, Save, Plus, Trash2, Globe } from 'lucide-react';
+import { Instagram, Music, Youtube, Linkedin, Edit, Save, Plus, Trash2, Globe } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../services/api';
@@ -10,7 +10,7 @@ import {
   getInfluencerAnalyticsStorageKey,
 } from '../utils/influencerStorage';
 
-type PlatformType = 'instagram' | 'tiktok' | 'youtube' | 'others';
+type PlatformType = 'instagram' | 'tiktok' | 'youtube' | 'linkedin' | 'others';
 
 interface PlatformMetrics {
   followers: string;
@@ -32,6 +32,7 @@ interface AnalyticsState {
   instagram: PlatformMetrics;
   tiktok: PlatformMetrics;
   youtube: PlatformMetrics;
+  linkedin: PlatformMetrics;
   others: PlatformMetrics;
   audienceLocation: LocationData[];
   audienceAge: AgeData[];
@@ -47,12 +48,14 @@ const PLATFORM_ID_TO_KEY: Record<number, PlatformType> = {
   2: 'youtube',
   3: 'tiktok',
   4: 'others',
+  5: 'linkedin',
 };
 const PLATFORM_KEY_TO_ID: Record<PlatformType, number> = {
   instagram: 1,
   youtube: 2,
   tiktok: 3,
   others: 4,
+  linkedin: 5,
 };
 
 type PlatformMeta = {
@@ -64,6 +67,7 @@ const DEFAULT_ANALYTICS_DATA: AnalyticsState = {
   instagram: { followers: '', avgViews: '', engagement: '' },
   tiktok: { followers: '', avgViews: '', engagement: '' },
   youtube: { followers: '', avgViews: '', engagement: '' },
+  linkedin: { followers: '', avgViews: '', engagement: '' },
   others: { followers: '', avgViews: '', engagement: '' },
   audienceLocation: [],
   audienceAge: [
@@ -163,6 +167,7 @@ export function InfluencerAnalytics() {
     instagram: { username: '', profile_url: '' },
     tiktok: { username: '', profile_url: '' },
     youtube: { username: '', profile_url: '' },
+    linkedin: { username: '', profile_url: '' },
     others: { username: '', profile_url: '' },
   });
   const analyticsStorageKey = getInfluencerAnalyticsStorageKey();
@@ -376,6 +381,7 @@ export function InfluencerAnalytics() {
       instagram: { ...current.instagram },
       tiktok: { ...current.tiktok },
       youtube: { ...current.youtube },
+      linkedin: { ...current.linkedin },
       others: { ...current.others },
       audienceLocation: [...current.audienceLocation],
       audienceAge: [...current.audienceAge],
@@ -454,6 +460,7 @@ export function InfluencerAnalytics() {
       instagram: { username: '', profile_url: '' },
       tiktok: { username: '', profile_url: '' },
       youtube: { username: '', profile_url: '' },
+      linkedin: { username: '', profile_url: '' },
       others: { username: '', profile_url: '' },
     };
 
@@ -649,6 +656,7 @@ export function InfluencerAnalytics() {
         instagram: parsed.instagram || DEFAULT_ANALYTICS_DATA.instagram,
         tiktok: parsed.tiktok || DEFAULT_ANALYTICS_DATA.tiktok,
         youtube: parsed.youtube || DEFAULT_ANALYTICS_DATA.youtube,
+        linkedin: parsed.linkedin || DEFAULT_ANALYTICS_DATA.linkedin,
         others: parsed.others || DEFAULT_ANALYTICS_DATA.others,
         audienceLocation: parsed.audienceLocation || DEFAULT_ANALYTICS_DATA.audienceLocation,
         audienceAge: parsed.audienceAge || DEFAULT_ANALYTICS_DATA.audienceAge,
@@ -971,6 +979,7 @@ export function InfluencerAnalytics() {
     { id: 'instagram' as PlatformType, name: 'Instagram', icon: Instagram },
     { id: 'tiktok' as PlatformType, name: 'TikTok', icon: Music },
     { id: 'youtube' as PlatformType, name: 'YouTube', icon: Youtube },
+    { id: 'linkedin' as PlatformType, name: 'LinkedIn', icon: Linkedin },
     { id: 'others' as PlatformType, name: 'Others', icon: Globe },
   ];
 

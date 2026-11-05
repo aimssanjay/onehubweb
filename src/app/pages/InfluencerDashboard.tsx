@@ -4,16 +4,17 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
   LayoutDashboard, User, Briefcase, MessageSquare, Settings, LogOut,
-  Instagram, Youtube, Video, TrendingUp, Banknote, Eye, Heart,
+  Instagram, Youtube, Linkedin, Video, TrendingUp, Banknote, Eye, Heart,
   Edit, Camera, BarChart3, Menu, X, Bell,
   ChevronDown, MapPin, Mail, Phone, Check,
-  ExternalLink, Search, Send, Handshake, CheckCircle2, XCircle, HelpCircle,
+  ExternalLink, Search, Send, Handshake, CheckCircle2, XCircle, HelpCircle, Crown, Flag,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
 import { useCategories } from '../hooks/useCategories';
 import { toast } from 'sonner';
 import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { TermsAcceptanceModal } from '../components/TermsAcceptanceModal';
 import {
   COUNTRIES,
   COUNTRY_SEARCH_ALIASES,
@@ -29,6 +30,14 @@ import {
 
 type TabType = 'overview' | 'profile' | 'campaigns' | 'earnings' | 'messages' |
   'notifications' | 'analytics' | 'settings';
+
+// get-profile keeps the base price on the nested influencer_profile record;
+// older responses had it at the top level (price_start / base_price)
+const getProfilePriceStart = (data: any): string | number | undefined => {
+  const nested = Array.isArray(data?.influencer_profile) ? data.influencer_profile[0] : data?.influencer_profile;
+  const candidates = [data?.price_start, data?.base_price, nested?.price_start, nested?.base_price];
+  return candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
+};
 
 type BarterPreference = '' | 'yes' | 'no';
 
@@ -49,6 +58,7 @@ type SharedAnalyticsData = {
   instagram: { followers: string; avgViews: string; engagement: string };
   tiktok: { followers: string; avgViews: string; engagement: string };
   youtube: { followers: string; avgViews: string; engagement: string };
+  linkedin: { followers: string; avgViews: string; engagement: string };
   others: { followers: string; avgViews: string; engagement: string };
   audienceLocation: Array<{ country: string; percentage: string }>;
   audienceAge: Array<{ range: string; percentage: string }>;
@@ -188,6 +198,7 @@ const PLATFORM_CONFIG = [
   { platformId: 1, name: 'Instagram', icon: Instagram, color: 'from-purple-600 to-pink-600' },
   { platformId: 3, name: 'TikTok', icon: Video, color: 'from-gray-800 to-gray-700' },
   { platformId: 2, name: 'YouTube', icon: Youtube, color: 'from-red-600 to-red-500' },
+  { platformId: 5, name: 'LinkedIn', icon: Linkedin, color: 'from-sky-700 to-blue-600' },
   { platformId: 4, name: 'UGC / Other', icon: Video, color: 'from-primary to-secondary' },
 ];
 
@@ -232,6 +243,7 @@ const DEFAULT_ANALYTICS_DATA: SharedAnalyticsData = {
   instagram: { followers: '', avgViews: '', engagement: '' },
   tiktok: { followers: '', avgViews: '', engagement: '' },
   youtube: { followers: '', avgViews: '', engagement: '' },
+  linkedin: { followers: '', avgViews: '', engagement: '' },
   others: { followers: '', avgViews: '', engagement: '' },
   audienceLocation: [],
   audienceAge: [],
@@ -706,17 +718,19 @@ export default function InfluencerDashboard() {
         instagram: { ...prev.instagram },
         tiktok: { ...prev.tiktok },
         youtube: { ...prev.youtube },
+        linkedin: { ...prev.linkedin },
         others: { ...prev.others },
         audienceLocation: [...prev.audienceLocation],
         audienceAge: [...prev.audienceAge],
         audienceGender: { ...prev.audienceGender },
       };
 
-      const platformMap: Record<number, keyof Pick<SharedAnalyticsData, 'instagram' | 'youtube' | 'tiktok' | 'others'>> = {
+      const platformMap: Record<number, keyof Pick<SharedAnalyticsData, 'instagram' | 'youtube' | 'tiktok' | 'linkedin' | 'others'>> = {
         1: 'instagram',
         2: 'youtube',
         3: 'tiktok',
         4: 'others',
+        5: 'linkedin',
       };
       const socialAccounts =
         toArrayData(profile?.social_accounts).length > 0
@@ -865,15 +879,11 @@ export default function InfluencerDashboard() {
   };
 
   const applyProfileData = (data: any) => {
+    const savedPrice = getProfilePriceStart(data);
     setUserData((prev: any) => ({
       ...(prev || {}),
       ...(data || {}),
-      price_start:
-        data?.price_start ??
-        data?.base_price ??
-        prev?.price_start ??
-        prev?.base_price ??
-        '',
+      price_start: savedPrice ?? prev?.price_start ?? prev?.base_price ?? '',
     }));
     setProfileImagePreview(data.profile_pic || null);
     setPlatformForm(buildPlatformForm(data.social_accounts || []));
@@ -887,12 +897,7 @@ export default function InfluencerDashboard() {
       bio: data.bio || '',
       gender: data.gender || '',
       date_of_birth: normalizeDateInput(data.date_of_birth || data.dob || ''),
-      price_start:
-        data.price_start != null
-          ? String(data.price_start)
-          : data.base_price != null
-            ? String(data.base_price)
-            : prev.price_start || '',
+      price_start: savedPrice != null ? String(savedPrice) : prev.price_start || '',
     }));
     setSelectedCategoryIds(
       (data.categories || [])
@@ -1438,6 +1443,7 @@ export default function InfluencerDashboard() {
           instagram: parsed.instagram || DEFAULT_ANALYTICS_DATA.instagram,
           tiktok: parsed.tiktok || DEFAULT_ANALYTICS_DATA.tiktok,
           youtube: parsed.youtube || DEFAULT_ANALYTICS_DATA.youtube,
+          linkedin: parsed.linkedin || DEFAULT_ANALYTICS_DATA.linkedin,
           others: parsed.others || DEFAULT_ANALYTICS_DATA.others,
           audienceLocation: parsed.audienceLocation || DEFAULT_ANALYTICS_DATA.audienceLocation,
           audienceAge: parsed.audienceAge || DEFAULT_ANALYTICS_DATA.audienceAge,
@@ -1457,6 +1463,29 @@ export default function InfluencerDashboard() {
       window.removeEventListener('focus', loadAnalyticsData);
     };
   }, [analyticsStorageKey]);
+
+  // Analytics and gallery save through their own API calls and then fire this event.
+  // Pull the fresh profile so My Profile / Overview show the new social accounts,
+  // without resetting an edit form the influencer may have open.
+  useEffect(() => {
+    const handleProfileUpdated = async () => {
+      const token = localStorage.getItem('influencer_token');
+      if (!token) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json();
+        if (!result.success || !result.data) return;
+        setUserData((prev: any) => ({ ...(prev || {}), social_accounts: result.data.social_accounts || [] }));
+        localStorage.setItem('influencer_user', JSON.stringify(result.data));
+      } catch {
+        // Keep what is on screen; the next page load will catch up
+      }
+    };
+    window.addEventListener('influencer-profile-updated', handleProfileUpdated);
+    return () => window.removeEventListener('influencer-profile-updated', handleProfileUpdated);
+  }, []);
 
   const refreshProfile = async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/influencers/get-profile`, {
@@ -1807,6 +1836,13 @@ export default function InfluencerDashboard() {
       color: 'from-gray-700 to-gray-800',
     },
     {
+      name: 'LinkedIn',
+      followers: formatOverviewFollowers(analyticsData.linkedin.followers),
+      engagement: formatOverviewEngagement(analyticsData.linkedin.engagement),
+      icon: Linkedin,
+      color: 'from-sky-700 to-blue-600',
+    },
+    {
       name: 'Others',
       followers: formatOverviewFollowers(analyticsData.others.followers),
       engagement: formatOverviewEngagement(analyticsData.others.engagement),
@@ -1824,6 +1860,7 @@ export default function InfluencerDashboard() {
     parseEngagementValue(analyticsData.instagram.engagement),
     parseEngagementValue(analyticsData.youtube.engagement),
     parseEngagementValue(analyticsData.tiktok.engagement),
+    parseEngagementValue(analyticsData.linkedin.engagement),
     parseEngagementValue(analyticsData.others.engagement),
   ].filter((value) => value > 0);
   const overviewEngagementRate = engagementValues.length
@@ -1842,6 +1879,20 @@ export default function InfluencerDashboard() {
   }
 
   if (!userData) return null;
+
+  // API sends 1/0 (or true/false); anything else means not accepted yet
+  const hasAcceptedTerms = ['1', 'true'].includes(String(userData.terms_accepted ?? '').toLowerCase());
+  const handleTermsAccepted = () => {
+    setUserData((prev: any) => {
+      const next = { ...(prev || {}), terms_accepted: 1 };
+      try {
+        localStorage.setItem('influencer_user', JSON.stringify(next));
+      } catch {
+        // ignore storage errors; the API already has the acceptance
+      }
+      return next;
+    });
+  };
 
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -2069,7 +2120,7 @@ export default function InfluencerDashboard() {
               <button onClick={() => setActiveTab('analytics')} className="text-primary text-xs hover:underline">View All →</button>
             </div>
             {/* Platform Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 mb-4">
               {socialPerformanceStats.map((s) => {
                 const Icon = s.icon;
                 return (
@@ -2204,6 +2255,12 @@ export default function InfluencerDashboard() {
               <div className="flex items-center gap-2">
                 <MapPin className="w-3 h-3 text-gray-500" />
                 {userData.city}{userData.country ? `, ${userData.country}` : ''}
+              </div>
+            )}
+            {userData.nationality && (
+              <div className="flex items-center gap-2">
+                <Flag className="w-3 h-3 text-gray-500" />
+                <span><span className="text-gray-500">Nationality:</span> {userData.nationality}</span>
               </div>
             )}
             <div className="flex items-center gap-2">
@@ -2634,38 +2691,8 @@ export default function InfluencerDashboard() {
                     )}
                   </div>
 
-                  {/* Connected Social Accounts */}
-                  <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-                    <h3 className="font-bold text-white mb-4">Social Media Accounts</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {PLATFORM_CONFIG.map((social) => {
-                        const Icon = social.icon;
-                        const account = userData.social_accounts?.find((s: any) => Number(s.platform_id) === social.platformId);
-                        return (
-                          <div key={social.platformId} className="flex items-center gap-3 bg-gray-800 rounded-lg p-3">
-                            <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${social.color} flex items-center justify-center flex-shrink-0`}>
-                              <Icon className="w-5 h-5 text-white" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-white text-sm">{social.name}</p>
-                              <p className="text-xs text-gray-400 truncate">{account?.profile_url || 'Not connected'}</p>
-                            </div>
-                            {account && (
-                              <a href={account.profile_url} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="w-4 h-4 text-gray-400 hover:text-primary" />
-                              </a>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Sidebar */}
-                <div className="space-y-4">
                   {/* Gallery Images */}
-                  <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                  <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="font-bold text-white">Gallery Images</h3>
                       {galleryImages.length > 0 && (
@@ -2681,13 +2708,13 @@ export default function InfluencerDashboard() {
                     <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
 
                     {galleryImages.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2 mt-3">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
                         {galleryImages.map((image) => (
                           <div key={image.id} className="relative rounded-lg overflow-hidden border border-gray-700">
                             <img
                               src={image.preview}
                               alt={image.name || image.file?.name || 'Gallery image'}
-                              className="w-full h-20 object-cover"
+                              className="w-full h-24 sm:h-28 object-cover"
                               onError={() => {
                                 // Auto-clean invalid persisted URLs so broken slots don't linger.
                                 if (!image.preview.startsWith('blob:')) {
@@ -2762,6 +2789,56 @@ export default function InfluencerDashboard() {
                         : (hasSavedGallery ? 'Update Images' : 'Save Images')}
                     </button>
                   </div>
+                </div>
+
+                {/* Right Sidebar */}
+                <div className="space-y-4">
+                  {/* Connected Social Accounts (primary first) */}
+                  {(() => {
+                    const primaryId = Number(
+                      userData.primary_platform_id ??
+                      userData.social_accounts?.find((s: any) => s.is_primary === true || Number(s.is_primary) === 1)?.platform_id
+                    );
+                    const ordered = [...PLATFORM_CONFIG].sort(
+                      (x, y) => Number(y.platformId === primaryId) - Number(x.platformId === primaryId)
+                    );
+                    return (
+                      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                        <h3 className="font-bold text-white mb-3">Social Media Accounts</h3>
+                        <div className="space-y-2">
+                          {ordered.map((social) => {
+                            const Icon = social.icon;
+                            const account = userData.social_accounts?.find((s: any) => Number(s.platform_id) === social.platformId);
+                            const isPrimary = social.platformId === primaryId;
+                            return (
+                              <div
+                                key={social.platformId}
+                                className={`flex items-center gap-3 rounded-lg p-2.5 ${isPrimary ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-gray-800'}`}
+                              >
+                                <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${social.color} flex items-center justify-center flex-shrink-0`}>
+                                  <Icon className="w-4 h-4 text-white" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-white text-sm truncate">{social.name}</p>
+                                  <p className="text-xs text-gray-400 truncate">{account?.profile_url || 'Not connected'}</p>
+                                </div>
+                                {isPrimary && (
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">
+                                    <Crown className="h-3 w-3 fill-current" /> Primary
+                                  </span>
+                                )}
+                                {account && (
+                                  <a href={account.profile_url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${social.name} profile`}>
+                                    <ExternalLink className="w-4 h-4 text-gray-400 hover:text-primary" />
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Audience Insights */}
                   <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
@@ -3171,6 +3248,8 @@ export default function InfluencerDashboard() {
           </div>
         </div>
       )}
+
+      {!hasAcceptedTerms && <TermsAcceptanceModal onAccepted={handleTermsAccepted} onLogout={handleLogout} />}
     </div>
   );
 }
