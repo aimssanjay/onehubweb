@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -7,7 +7,7 @@ import {
   Clapperboard, Mountain, PawPrint, Camera, Palette, PersonStanding, Car, Flower2, Newspaper, Music,
   Smile, GraduationCap, Briefcase, CalendarDays, Users, Shirt, Utensils, Coffee, Gamepad2, Dumbbell,
   HeartPulse, ShieldPlus, Mic, Leaf, Sparkles, User, Music2, Podcast, Star, Droplet, Cpu, Plane,
-  Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send, Handshake,
+  Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send, Handshake, Loader2, CheckCircle2, XCircle,
 } from 'lucide-react';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
@@ -56,6 +56,10 @@ const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
 
 const isEmail = (value: string) => EMAIL_REGEX.test(value.trim());
 const isPhone = (value: string) => PHONE_REGEX.test(value.trim());
+
+// Live email availability check on step 1 (debounced while typing)
+type EmailStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken' | 'error';
+const EMAIL_CHECK_DELAY_MS = 600;
 
 // lucide has no TikTok logo, so draw it inline
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -205,6 +209,42 @@ export function InfluencerSignup() {
     password: '',
     confirmPassword: '',
   });
+  const [emailStatus, setEmailStatus] = useState<EmailStatus>('idle');
+
+  // Ask the API whether the email is already registered, once typing pauses.
+  // Each keystroke cancels the pending timer and any request still in flight.
+  useEffect(() => {
+    const email = formData.email.trim();
+    if (!email) {
+      setEmailStatus('idle');
+      return;
+    }
+    if (!isEmail(email)) {
+      setEmailStatus('invalid');
+      return;
+    }
+    setEmailStatus('checking');
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/users/check-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (!data?.success) throw new Error(data?.message);
+        setEmailStatus(data.email_exists || data.available === false ? 'taken' : 'available');
+      } catch (error) {
+        if (!controller.signal.aborted) setEmailStatus('error');
+      }
+    }, EMAIL_CHECK_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [formData.email]);
 
   const toggleCategory = (categoryId: number) => {
     setSelectedCategories(prev =>
@@ -236,6 +276,10 @@ export function InfluencerSignup() {
   const handleAccountNext = () => {
     if (!isEmail(formData.email)) {
       alert('Please enter a valid email address');
+      return;
+    }
+    if (emailStatus === 'taken') {
+      document.getElementById('signup-email')?.focus();
       return;
     }
     if (!isPhone(formData.phone)) {
@@ -530,9 +574,47 @@ export function InfluencerSignup() {
                           placeholder={placeholder}
                           value={formData[key as 'fullName' | 'email']}
                           onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                          className="h-11 rounded-xl border-gray-200 bg-white pl-11 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
+                          aria-invalid={key === 'email' && (emailStatus === 'taken' || emailStatus === 'invalid') ? true : undefined}
+                          aria-describedby={key === 'email' && emailStatus !== 'idle' ? 'signup-email-status' : undefined}
+                          className={`h-11 rounded-xl bg-white pl-11 text-gray-900 placeholder:text-gray-400 ${
+                            key === 'email' && emailStatus === 'taken'
+                              ? 'border-red-400 pr-11 focus-visible:border-red-400 focus-visible:ring-red-100'
+                              : key === 'email' && emailStatus === 'available'
+                                ? 'border-green-400 pr-11 focus-visible:border-green-400 focus-visible:ring-green-100'
+                                : `border-gray-200 focus-visible:border-violet-400 focus-visible:ring-violet-200 ${key === 'email' ? 'pr-11' : ''}`
+                          }`}
                         />
+                        {key === 'email' && (
+                          <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2" aria-hidden="true">
+                            {emailStatus === 'checking' && <Loader2 className="h-[18px] w-[18px] animate-spin text-violet-500" />}
+                            {emailStatus === 'available' && <CheckCircle2 className="h-[18px] w-[18px] text-green-500" />}
+                            {emailStatus === 'taken' && <XCircle className="h-[18px] w-[18px] text-red-500" />}
+                          </span>
+                        )}
                       </div>
+                      {key === 'email' && emailStatus !== 'idle' && (
+                        <p
+                          id="signup-email-status"
+                          role="status"
+                          aria-live="polite"
+                          className={`mt-1.5 text-xs ${
+                            emailStatus === 'taken' ? 'text-red-600'
+                              : emailStatus === 'available' ? 'text-green-600'
+                                : 'text-gray-500'
+                          }`}
+                        >
+                          {emailStatus === 'invalid' && 'Enter a valid email address, e.g. you@example.com'}
+                          {emailStatus === 'checking' && 'Checking availability...'}
+                          {emailStatus === 'available' && 'Email address is available.'}
+                          {emailStatus === 'error' && "Couldn't check this email right now. You can still continue."}
+                          {emailStatus === 'taken' && (
+                            <>
+                              This email is already registered.{' '}
+                              <a href="/influencer/login" className="font-semibold text-violet-600 hover:underline">Sign in instead</a>
+                            </>
+                          )}
+                        </p>
+                      )}
                     </div>
                   ))}
 
@@ -596,7 +678,7 @@ export function InfluencerSignup() {
 
                   <Button
                     onClick={handleAccountNext}
-                    disabled={!formData.fullName.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.password || formData.password !== formData.confirmPassword}
+                    disabled={!formData.fullName.trim() || !formData.email.trim() || emailStatus === 'taken' || emailStatus === 'checking' || !formData.phone.trim() || !formData.password || formData.password !== formData.confirmPassword}
                     className="mt-2 h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-base font-semibold text-white hover:from-violet-700 hover:to-purple-600"
                   >
                     Continue
