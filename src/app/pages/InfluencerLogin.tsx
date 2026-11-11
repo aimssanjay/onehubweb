@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Eye, EyeOff, Lock, User, ArrowRight, Gift, BarChart3, Heart, Instagram, Sparkles, Send } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, Mail, ArrowRight, Gift, BarChart3, Heart, Instagram, Sparkles, Send } from 'lucide-react';
 // Unsplash photos (free licence), saved locally
 import creatorWoman from '../../assets/auth/creator-woman.jpg';
 import creatorMan from '../../assets/auth/creator-man.jpg';
@@ -23,15 +23,12 @@ function DubaiSkyline({ className }: { className?: string }) {
   );
 }
 import { clearInfluencerClientData } from '../utils/influencerStorage';
+import { TopNotice, type TopNoticeData } from '../components/TopNotice';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
 
 const isEmail = (value: string) => EMAIL_REGEX.test(value.trim());
-const isPhone = (value: string) => PHONE_REGEX.test(value.trim());
-const normalizePhone = (value: string) => value.replace(/\D/g, '');
-const phoneToPseudoEmail = (phone: string) => `${normalizePhone(phone)}@phone.onehub.local`;
 
 export default function InfluencerLogin() {
   const navigate = useNavigate();
@@ -40,37 +37,36 @@ export default function InfluencerLogin() {
     loginId: '',
     password: '',
   });
+  const [notice, setNotice] = useState<TopNoticeData | null>(null);
+  const [fieldError, setFieldError] = useState<'email' | 'password' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const showError = (message: string, field: 'email' | 'password' | null = null) => {
+    setNotice(message ? { id: Date.now(), message } : null);
+    setFieldError(field);
+  };
 
 const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
+  if (submitting) return;
   const loginId = formData.loginId.trim();
   const password = formData.password.trim();
-  const loginIsEmail = isEmail(loginId);
-  const loginIsPhone = isPhone(loginId);
 
-  if (!loginIsEmail && !loginIsPhone) {
-    alert("Please enter a valid email or phone number");
-    return;
-  }
+  if (!loginId) return showError('Please enter your email address.', 'email');
+  if (!isEmail(loginId)) return showError('Please enter a valid email address.', 'email');
+  if (!password) return showError('Please enter your password.', 'password');
 
+  setNotice(null);
+  setFieldError(null);
+  setSubmitting(true);
   try {
-    const payload: Record<string, string> = { password };
-    if (loginIsEmail) {
-      payload.email = loginId;
-    } else {
-      // Backend login currently expects email/password.
-      payload.email = phoneToPseudoEmail(loginId);
-      payload.phone = loginId;
-    }
-
     const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.LOGIN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ email: loginId, password }),
     });
 
-    const data = await response.json();
-    console.log("Login Response:", data);
+    const data = await response.json().catch(() => ({}));
 
     if (response.ok && data.success) {
       const token =
@@ -80,14 +76,13 @@ const handleLogin = async (e: React.FormEvent) => {
         data.data?.access_token;
 
       if (!token) {
-        alert("Login successful but token missing. Check console.");
+        showError('Something went wrong while signing you in. Please try again.');
         return;
       }
 
       // Always reset previous influencer-scoped client cache before setting the new session.
       clearInfluencerClientData();
 
-      // ✅ Save with correct key names
       localStorage.setItem("influencer_token", token);
       localStorage.setItem("influencer_user", JSON.stringify(data.data));
 
@@ -95,16 +90,18 @@ const handleLogin = async (e: React.FormEvent) => {
       return;
     }
 
-    alert(data?.message || "Invalid email/phone or password");
-
+    showError(data?.message || 'Invalid email or password.', 'password');
   } catch (error) {
     console.error("Login Error:", error);
-    alert("Network issue or server error");
+    showError('Unable to reach the server. Please check your connection and try again.');
+  } finally {
+    setSubmitting(false);
   }
 };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-violet-50 via-white to-fuchsia-50">
+      <TopNotice notice={notice} onClose={() => setNotice(null)} />
       {/* Background: soft colour glows, white clouds along the bottom, gold sparkle under the card */}
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <div className="absolute -left-24 top-1/3 h-80 w-[30rem] rounded-full bg-violet-100/70 blur-3xl" />
@@ -187,22 +184,26 @@ const handleLogin = async (e: React.FormEvent) => {
               <p className="mt-2 text-gray-500">Sign in to your influencer account</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} noValidate className="space-y-5">
+
               <div>
                 <label htmlFor="login-id" className="mb-1.5 block text-sm font-medium text-gray-800">
-                  Email Address or Phone Number
+                  Email Address
                 </label>
                 <div className="relative">
-                  <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
                   <Input
                     id="login-id"
-                    type="text"
-                    autoComplete="username"
-                    placeholder="you@example.com or +971 50 123 4567"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@example.com"
                     value={formData.loginId}
-                    onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
-                    className="h-12 rounded-xl border-gray-200 bg-white pl-12 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, loginId: e.target.value });
+                      if (fieldError) setFieldError(null);
+                    }}
+                    aria-invalid={fieldError === 'email'}
+                    className={`h-12 rounded-xl bg-white pl-12 ${fieldError === 'email' ? 'border-red-300' : 'border-gray-200'} text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200`}
                   />
                 </div>
               </div>
@@ -219,9 +220,12 @@ const handleLogin = async (e: React.FormEvent) => {
                     autoComplete="current-password"
                     placeholder="Enter your password"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="h-12 rounded-xl border-gray-200 bg-white pl-12 pr-12 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200"
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, password: e.target.value });
+                      if (fieldError) setFieldError(null);
+                    }}
+                    aria-invalid={fieldError === 'password'}
+                    className={`h-12 rounded-xl bg-white pl-12 pr-12 text-gray-900 placeholder:text-gray-400 focus-visible:border-violet-400 focus-visible:ring-violet-200 ${fieldError === 'password' ? 'border-red-300' : 'border-gray-200'}`}
                   />
                   <button
                     type="button"
@@ -242,10 +246,20 @@ const handleLogin = async (e: React.FormEvent) => {
 
               <Button
                 type="submit"
-                className="h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-base font-semibold text-white shadow-lg shadow-violet-300/50 hover:from-violet-700 hover:to-purple-600"
+                disabled={submitting}
+                className="h-12 w-full gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-base font-semibold text-white shadow-lg shadow-violet-300/50 hover:from-violet-700 hover:to-purple-600 disabled:opacity-80"
               >
-                Sign In
-                <ArrowRight className="h-4 w-4" />
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </Button>
 
               <div className="flex items-center gap-3 pt-2">

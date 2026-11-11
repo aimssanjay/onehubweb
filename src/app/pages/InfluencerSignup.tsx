@@ -9,6 +9,7 @@ import {
   HeartPulse, ShieldPlus, Mic, Leaf, Sparkles, User, Music2, Podcast, Star, Droplet, Cpu, Plane,
   Crown, Zap, BarChart3, Mail, Phone, Lock, Gem, Heart, Send, Handshake, Loader2, CheckCircle2, XCircle,
 } from 'lucide-react';
+import { isValidPhoneNumber, type CountryCode } from 'libphonenumber-js/mobile';
 import { usePlatforms } from '../hooks/usePlatforms';
 import { useCategories } from '../hooks/useCategories';
 import { API_BASE_URL, API_ENDPOINTS } from '../../services/api';
@@ -16,39 +17,39 @@ import { markInfluencerNewSignup } from '../utils/influencerStorage';
 import creatorPhoto from '../../assets/blog/content-creater.jpg';
 
 // Country codes for the phone field; UAE first, then the Gulf, then other common markets
-const DIAL_CODES = [
-  { country: 'United Arab Emirates', code: '+971', flag: '🇦🇪' },
-  { country: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
-  { country: 'Qatar', code: '+974', flag: '🇶🇦' },
-  { country: 'Kuwait', code: '+965', flag: '🇰🇼' },
-  { country: 'Bahrain', code: '+973', flag: '🇧🇭' },
-  { country: 'Oman', code: '+968', flag: '🇴🇲' },
-  { country: 'India', code: '+91', flag: '🇮🇳' },
-  { country: 'Pakistan', code: '+92', flag: '🇵🇰' },
-  { country: 'Bangladesh', code: '+880', flag: '🇧🇩' },
-  { country: 'Sri Lanka', code: '+94', flag: '🇱🇰' },
-  { country: 'Nepal', code: '+977', flag: '🇳🇵' },
-  { country: 'Philippines', code: '+63', flag: '🇵🇭' },
-  { country: 'Egypt', code: '+20', flag: '🇪🇬' },
-  { country: 'Jordan', code: '+962', flag: '🇯🇴' },
-  { country: 'Lebanon', code: '+961', flag: '🇱🇧' },
-  { country: 'Morocco', code: '+212', flag: '🇲🇦' },
-  { country: 'Turkey', code: '+90', flag: '🇹🇷' },
-  { country: 'United Kingdom', code: '+44', flag: '🇬🇧' },
-  { country: 'United States / Canada', code: '+1', flag: '🇺🇸' },
-  { country: 'France', code: '+33', flag: '🇫🇷' },
-  { country: 'Germany', code: '+49', flag: '🇩🇪' },
-  { country: 'Italy', code: '+39', flag: '🇮🇹' },
-  { country: 'Spain', code: '+34', flag: '🇪🇸' },
-  { country: 'Russia', code: '+7', flag: '🇷🇺' },
-  { country: 'China', code: '+86', flag: '🇨🇳' },
-  { country: 'Singapore', code: '+65', flag: '🇸🇬' },
-  { country: 'Malaysia', code: '+60', flag: '🇲🇾' },
-  { country: 'Indonesia', code: '+62', flag: '🇮🇩' },
-  { country: 'Australia', code: '+61', flag: '🇦🇺' },
-  { country: 'South Africa', code: '+27', flag: '🇿🇦' },
-  { country: 'Nigeria', code: '+234', flag: '🇳🇬' },
-  { country: 'Kenya', code: '+254', flag: '🇰🇪' },
+const DIAL_CODES: { country: string; code: string; flag: string; iso: CountryCode[] }[] = [
+  { country: 'United Arab Emirates', code: '+971', flag: '🇦🇪', iso: ['AE'] as CountryCode[] },
+  { country: 'Saudi Arabia', code: '+966', flag: '🇸🇦', iso: ['SA'] as CountryCode[] },
+  { country: 'Qatar', code: '+974', flag: '🇶🇦', iso: ['QA'] as CountryCode[] },
+  { country: 'Kuwait', code: '+965', flag: '🇰🇼', iso: ['KW'] as CountryCode[] },
+  { country: 'Bahrain', code: '+973', flag: '🇧🇭', iso: ['BH'] as CountryCode[] },
+  { country: 'Oman', code: '+968', flag: '🇴🇲', iso: ['OM'] as CountryCode[] },
+  { country: 'India', code: '+91', flag: '🇮🇳', iso: ['IN'] as CountryCode[] },
+  { country: 'Pakistan', code: '+92', flag: '🇵🇰', iso: ['PK'] as CountryCode[] },
+  { country: 'Bangladesh', code: '+880', flag: '🇧🇩', iso: ['BD'] as CountryCode[] },
+  { country: 'Sri Lanka', code: '+94', flag: '🇱🇰', iso: ['LK'] as CountryCode[] },
+  { country: 'Nepal', code: '+977', flag: '🇳🇵', iso: ['NP'] as CountryCode[] },
+  { country: 'Philippines', code: '+63', flag: '🇵🇭', iso: ['PH'] as CountryCode[] },
+  { country: 'Egypt', code: '+20', flag: '🇪🇬', iso: ['EG'] as CountryCode[] },
+  { country: 'Jordan', code: '+962', flag: '🇯🇴', iso: ['JO'] as CountryCode[] },
+  { country: 'Lebanon', code: '+961', flag: '🇱🇧', iso: ['LB'] as CountryCode[] },
+  { country: 'Morocco', code: '+212', flag: '🇲🇦', iso: ['MA'] as CountryCode[] },
+  { country: 'Turkey', code: '+90', flag: '🇹🇷', iso: ['TR'] as CountryCode[] },
+  { country: 'United Kingdom', code: '+44', flag: '🇬🇧', iso: ['GB'] as CountryCode[] },
+  { country: 'United States / Canada', code: '+1', flag: '🇺🇸', iso: ['US', 'CA'] as CountryCode[] },
+  { country: 'France', code: '+33', flag: '🇫🇷', iso: ['FR'] as CountryCode[] },
+  { country: 'Germany', code: '+49', flag: '🇩🇪', iso: ['DE'] as CountryCode[] },
+  { country: 'Italy', code: '+39', flag: '🇮🇹', iso: ['IT'] as CountryCode[] },
+  { country: 'Spain', code: '+34', flag: '🇪🇸', iso: ['ES'] as CountryCode[] },
+  { country: 'Russia', code: '+7', flag: '🇷🇺', iso: ['RU'] as CountryCode[] },
+  { country: 'China', code: '+86', flag: '🇨🇳', iso: ['CN'] as CountryCode[] },
+  { country: 'Singapore', code: '+65', flag: '🇸🇬', iso: ['SG'] as CountryCode[] },
+  { country: 'Malaysia', code: '+60', flag: '🇲🇾', iso: ['MY'] as CountryCode[] },
+  { country: 'Indonesia', code: '+62', flag: '🇮🇩', iso: ['ID'] as CountryCode[] },
+  { country: 'Australia', code: '+61', flag: '🇦🇺', iso: ['AU'] as CountryCode[] },
+  { country: 'South Africa', code: '+27', flag: '🇿🇦', iso: ['ZA'] as CountryCode[] },
+  { country: 'Nigeria', code: '+234', flag: '🇳🇬', iso: ['NG'] as CountryCode[] },
+  { country: 'Kenya', code: '+254', flag: '🇰🇪', iso: ['KE'] as CountryCode[] },
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,6 +57,68 @@ const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
 
 const isEmail = (value: string) => EMAIL_REGEX.test(value.trim());
 const isPhone = (value: string) => PHONE_REGEX.test(value.trim());
+
+// Default country from the visitor's time zone, so most people never touch the code box
+const TIMEZONE_COUNTRY: Record<string, CountryCode> = {
+  'Asia/Dubai': 'AE', 'Asia/Riyadh': 'SA', 'Asia/Qatar': 'QA', 'Asia/Kuwait': 'KW', 'Asia/Bahrain': 'BH',
+  'Asia/Muscat': 'OM', 'Asia/Kolkata': 'IN', 'Asia/Calcutta': 'IN', 'Asia/Karachi': 'PK', 'Asia/Dhaka': 'BD',
+  'Asia/Colombo': 'LK', 'Asia/Kathmandu': 'NP', 'Asia/Katmandu': 'NP', 'Asia/Manila': 'PH', 'Africa/Cairo': 'EG',
+  'Asia/Amman': 'JO', 'Asia/Beirut': 'LB', 'Africa/Casablanca': 'MA', 'Europe/Istanbul': 'TR', 'Europe/London': 'GB',
+  'America/New_York': 'US', 'America/Chicago': 'US', 'America/Denver': 'US', 'America/Phoenix': 'US',
+  'America/Los_Angeles': 'US', 'America/Anchorage': 'US', 'Pacific/Honolulu': 'US', 'America/Toronto': 'CA',
+  'America/Vancouver': 'CA', 'America/Edmonton': 'CA', 'America/Winnipeg': 'CA', 'America/Halifax': 'CA',
+  'Europe/Paris': 'FR', 'Europe/Berlin': 'DE', 'Europe/Rome': 'IT', 'Europe/Madrid': 'ES', 'Europe/Moscow': 'RU',
+  'Asia/Shanghai': 'CN', 'Asia/Singapore': 'SG', 'Asia/Kuala_Lumpur': 'MY', 'Asia/Jakarta': 'ID',
+  'Australia/Sydney': 'AU', 'Australia/Melbourne': 'AU', 'Australia/Brisbane': 'AU', 'Australia/Perth': 'AU',
+  'Australia/Adelaide': 'AU', 'Africa/Johannesburg': 'ZA', 'Africa/Lagos': 'NG', 'Africa/Nairobi': 'KE',
+};
+const timezoneCountry = (): CountryCode | undefined => {
+  try {
+    return TIMEZONE_COUNTRY[Intl.DateTimeFormat().resolvedOptions().timeZone];
+  } catch {
+    return undefined;
+  }
+};
+const defaultDialCode = () => {
+  const country = timezoneCountry();
+  return DIAL_CODES.find((d) => country && d.iso.includes(country))?.code ?? '+971';
+};
+
+// A complete local number that is not a valid mobile for the selected country:
+// find the listed country it is valid for (time-zone country first, then list order).
+const detectDialCodeFromLocalNumber = (number: string, currentCode: string): string | null => {
+  if (number.replace(/\D/g, '').length < 7) return null;
+  const isValidFor = (d: (typeof DIAL_CODES)[number]) => d.iso.some((c) => isValidPhoneNumber(number, c));
+  const current = DIAL_CODES.find((d) => d.code === currentCode);
+  if (current && isValidFor(current)) return null;
+  const candidates = DIAL_CODES.filter(isValidFor);
+  if (candidates.length === 0) return null;
+  const tz = timezoneCountry();
+  return (candidates.find((d) => tz && d.iso.includes(tz)) ?? candidates[0]).code;
+};
+
+// When a number is typed or pasted with its country code (+44..., 0044...), pick that
+// country and keep only the local part in the input. Country codes never start with
+// another code, so a code is recognised as soon as its last digit is typed.
+const DIAL_CODES_LONGEST_FIRST = [...DIAL_CODES].sort((a, b) => b.code.length - a.code.length);
+const splitInternationalNumber = (raw: string): { code: string; rest: string } | null => {
+  const trimmed = raw.trimStart();
+  const international = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed.startsWith('00') ? trimmed.slice(2) : null;
+  if (international === null) return null;
+  // Read digits only, but remember where each digit sits so formatting in the rest is kept
+  let digits = '';
+  for (let i = 0; i < international.length && digits.length < 4; i++) {
+    const ch = international[i];
+    if (/\d/.test(ch)) digits += ch;
+    else if (!/[\s\-().]/.test(ch)) break;
+    const match = DIAL_CODES_LONGEST_FIRST.find((d) => d.code.slice(1) === digits);
+    if (match) {
+      const rest = international.slice(i + 1).replace(/^[\s\-.]+/, '').replace(/^0+(?=\d)/, '');
+      return { code: match.code, rest };
+    }
+  }
+  return null;
+};
 
 // Live email availability check on step 1 (debounced while typing)
 type EmailStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken' | 'error';
@@ -187,7 +250,8 @@ export function InfluencerSignup() {
   }));
 
   const [step, setStep] = useState(1);
-  const [dialCode, setDialCode] = useState('+971');
+  const [dialCode, setDialCode] = useState(defaultDialCode);
+  const [dialCodeFlash, setDialCodeFlash] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
@@ -372,7 +436,7 @@ export function InfluencerSignup() {
           body: JSON.stringify({
             name: formData.fullName.trim(),
             email: formData.email.trim(),
-            phone: `${dialCode} ${formData.phone.trim()}`,
+            phone: formData.phone.trim().startsWith('+') ? formData.phone.trim() : `${dialCode} ${formData.phone.trim()}`,
             password: formData.password,
             user_type_id: 3,
             terms_accepted: agreeTerms ? 1 : 0,
@@ -629,7 +693,9 @@ export function InfluencerSignup() {
                         aria-label="Country code"
                         value={dialCode}
                         onChange={(e) => setDialCode(e.target.value)}
-                        className="border-r border-gray-200 bg-transparent pl-1 pr-2 text-sm font-medium text-gray-800 focus:outline-none"
+                        className={`border-r border-gray-200 pl-1 pr-2 text-sm font-medium text-gray-800 transition-colors duration-500 focus:outline-none ${
+                          dialCodeFlash ? 'bg-violet-100 text-violet-700' : 'bg-transparent'
+                        }`}
                       >
                         {DIAL_CODES.map(({ code, country, flag }) => (
                           <option key={`${country}-${code}`} value={code}>{flag} {code}</option>
@@ -638,10 +704,27 @@ export function InfluencerSignup() {
                       <input
                         id="signup-phone"
                         type="tel"
-                        autoComplete="tel-national"
+                        autoComplete="tel"
                         placeholder={dialCode === '+971' ? '50 123 4567' : 'Phone number'}
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        onChange={(e) => {
+                          const detected = splitInternationalNumber(e.target.value);
+                          if (detected) {
+                            setDialCode(detected.code);
+                            setFormData({ ...formData, phone: detected.rest });
+                            setDialCodeFlash(true);
+                            window.setTimeout(() => setDialCodeFlash(false), 900);
+                            return;
+                          }
+                          const local = e.target.value.replace(/^\s+/, '');
+                          setFormData({ ...formData, phone: local });
+                          const guessed = detectDialCodeFromLocalNumber(local, dialCode);
+                          if (guessed) {
+                            setDialCode(guessed);
+                            setDialCodeFlash(true);
+                            window.setTimeout(() => setDialCodeFlash(false), 900);
+                          }
+                        }}
                         className="min-w-0 flex-1 bg-transparent px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
                       />
                     </div>

@@ -15,6 +15,8 @@ import { toast } from 'sonner';
 import { InfluencerAnalytics } from '../components/InfluencerAnalytics';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { TermsAcceptanceModal } from '../components/TermsAcceptanceModal';
+import { MediaKitCard } from '../components/MediaKitCard';
+import { compressImage } from '../utils/compressImage';
 import {
   COUNTRIES,
   COUNTRY_SEARCH_ALIASES,
@@ -80,38 +82,6 @@ type GalleryImageItem = {
 };
 
 const MAX_GALLERY_IMAGE_COUNT = 5;
-
-const compressImage = (file: File, maxDim = 1200, quality = 0.78): Promise<File> =>
-  new Promise((resolve) => {
-    const img = new Image();
-    const blobUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(blobUrl);
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        const ratio = Math.min(maxDim / width, maxDim / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(file); return; }
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) { resolve(file); return; }
-          const name = file.name.replace(/\.[^.]+$/, '.jpg');
-          resolve(new File([blob], name, { type: 'image/jpeg' }));
-        },
-        'image/jpeg',
-        quality,
-      );
-    };
-    img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(file); };
-    img.src = blobUrl;
-  });
 
 const createTinyPngFile = () => {
   const tinyPngBytes = Uint8Array.from([
@@ -364,6 +334,25 @@ export default function InfluencerDashboard() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close the header account menu on outside click or Escape
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setIsUserMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isUserMenuOpen]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [campaignsSubTab, setCampaignsSubTab] = useState<'available' | 'applied' | 'ongoing' | 'completed'>('available');
   const [selectedConversation, setSelectedConversation] = useState(mockMessages[0]);
@@ -1907,27 +1896,129 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-16 md:pb-0 [&_a]:cursor-pointer [&_button]:cursor-pointer">
-      {/* Portal bar */}
-      <div className="bg-black border-b border-gray-800 px-4 py-2">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-gray-800/80 bg-black/85 backdrop-blur-md">
+        <div className="flex h-16 items-center gap-3 px-3 sm:px-4 md:px-0">
+          {/* Brand: same width as the desktop sidebar so the page title lines up with the content */}
+          <div className="flex items-center gap-2.5 md:w-56 md:shrink-0 md:px-5">
             {isMobile && (
-              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-1 hover:bg-gray-800 rounded-lg">
-                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+                className="rounded-lg p-2 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             )}
-            <span className="text-primary text-sm font-semibold">Influencers Portal</span>
+            <button
+              type="button"
+              onClick={() => handleTabChange('overview')}
+              className="flex items-center gap-2.5 rounded-lg"
+              aria-label="Go to dashboard overview"
+            >
+              <span className="text-left leading-tight">
+                <span className="block text-lg font-extrabold tracking-tight text-white">OneHub</span>
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Influencer Portal</span>
+              </span>
+            </button>
           </div>
-          <span className="text-gray-400 text-xs">Welcome, {userData?.name}</span>
+
+          {/* Current page */}
+          {!isMobile && (
+            <div className="flex min-w-0 items-center gap-2 border-l border-gray-800 pl-6 text-sm">
+              <span className="text-gray-500">Dashboard</span>
+              <span className="text-gray-700">/</span>
+              <span className="truncate font-semibold text-white">
+                {menuItems.find((item) => item.id === activeTab)?.label ?? 'Overview'}
+              </span>
+            </div>
+          )}
+
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-3 md:pr-6">
+            {/* Account menu */}
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={isUserMenuOpen}
+                className={`flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-1 transition-colors sm:pr-3 ${
+                  isUserMenuOpen ? 'border-gray-700 bg-gray-800' : 'border-gray-800 bg-gray-900 hover:border-gray-700'
+                }`}
+              >
+                {userData?.profile_pic ? (
+                  <img src={userData.profile_pic} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-primary/40" />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-sm font-bold text-black">
+                    {userData?.name?.[0]?.toUpperCase() || 'U'}
+                  </span>
+                )}
+                <span className="hidden max-w-[10rem] text-left leading-tight sm:block">
+                  <span className="block truncate text-sm font-semibold text-white">{userData?.name}</span>
+                  <span className="block text-[11px] text-gray-500">Influencer</span>
+                </span>
+                <ChevronDown className={`hidden h-4 w-4 text-gray-500 transition-transform sm:block ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isUserMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-xl border border-gray-800 bg-gray-900 shadow-2xl shadow-black/60 animate-in fade-in slide-in-from-top-1"
+                >
+                  <div className="border-b border-gray-800 px-4 py-3">
+                    <p className="truncate text-sm font-semibold text-white">{userData?.name}</p>
+                    <p className="truncate text-xs text-gray-400">{userData?.email}</p>
+                  </div>
+                  <div className="p-1.5">
+                    {[
+                      { id: 'profile', label: 'My Profile', icon: User },
+                      { id: 'settings', label: 'Settings', icon: Settings },
+                    ].map(({ id, label, icon: ItemIcon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          handleTabChange(id as TabType);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+                      >
+                        <ItemIcon className="h-4 w-4" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-gray-800 p-1.5">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* Mobile Sidebar */}
       {isMobile && isMobileMenuOpen && (
         <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-72 h-full bg-gray-950 border-r border-gray-800 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-800">
-              <span className="text-primary font-bold text-lg">Influencers Portal</span>
+              <span className="flex items-center gap-2.5">
+                <span className="leading-tight">
+                  <span className="block text-lg font-extrabold tracking-tight text-white">OneHub</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Influencer Portal</span>
+                </span>
+              </span>
             </div>
             <nav className="p-4 space-y-1">
               {menuItems.map((item) => {
@@ -1954,7 +2045,7 @@ export default function InfluencerDashboard() {
       <div className="flex">
         {/* Desktop Sidebar */}
         {!isMobile && (
-          <aside className="w-56 min-h-[calc(100vh-88px)] bg-black border-r border-gray-800 py-6 px-3 flex-shrink-0">
+          <aside className="sticky top-16 h-[calc(100vh-4rem)] w-56 overflow-y-auto bg-black border-r border-gray-800 py-6 px-3 flex-shrink-0">
             <nav className="space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
@@ -2259,8 +2350,8 @@ export default function InfluencerDashboard() {
             )}
             {userData.nationality && (
               <div className="flex items-center gap-2">
-                <Flag className="w-3 h-3 text-gray-500" />
-                <span><span className="text-gray-500">Nationality:</span> {userData.nationality}</span>
+                <Flag className="w-3 h-3 text-gray-500" aria-hidden="true" />
+                <span><span className="sr-only">Nationality: </span>{userData.nationality}</span>
               </div>
             )}
             <div className="flex items-center gap-2">
@@ -2366,17 +2457,8 @@ export default function InfluencerDashboard() {
           {/* ── PROFILE TAB ── */}
           {activeTab === 'profile' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h1 className="text-2xl font-bold text-white">My Profile</h1>
-                <button
-                  onClick={() => isEditing ? handleSaveProfile() : setIsEditing(true)}
-                  disabled={isSavingProfile}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                    isEditing ? 'bg-primary hover:bg-secondary text-black' : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
-                  } ${isSavingProfile ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                  <Edit className="w-4 h-4" />
-                  {isEditing ? (isSavingProfile ? 'Saving...' : 'Save Profile') : 'Edit Profile'}
-                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -2414,7 +2496,7 @@ export default function InfluencerDashboard() {
                           className="hidden"
                         />
                       </div>
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         {isEditing ? (
                           <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                             className={`bg-gray-800 border-gray-700 text-white text-lg font-bold mb-2 ${errorBorder('name')}`} placeholder="Full Name *" aria-required="true" />
@@ -2426,6 +2508,16 @@ export default function InfluencerDashboard() {
                           <p className="text-xs text-primary mt-2">{profileImageFile.name}</p>
                         )}
                       </div>
+                      <button
+                        onClick={() => isEditing ? handleSaveProfile() : setIsEditing(true)}
+                        disabled={isSavingProfile}
+                        type="button"
+                        className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                          isEditing ? 'bg-primary hover:bg-secondary text-black' : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
+                        } ${isSavingProfile ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                        <Edit className="w-4 h-4" />
+                        {isEditing ? (isSavingProfile ? 'Saving...' : 'Save Profile') : 'Edit Profile'}
+                      </button>
                     </div>
 
                     {/* Profile Fields */}
@@ -2691,103 +2783,109 @@ export default function InfluencerDashboard() {
                     )}
                   </div>
 
-                  {/* Gallery Images */}
-                  <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="font-bold text-white">Gallery Images</h3>
+                  {/* Gallery (left) + Media Kit (right) */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+                    {/* Gallery Images */}
+                    <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="font-bold text-white">Gallery Images</h3>
+                        {galleryImages.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllGalleryImages}
+                            className="text-xs font-medium text-red-400 hover:text-red-300"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
+
                       {galleryImages.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          {galleryImages.map((image) => (
+                            <div key={image.id} className="relative rounded-lg overflow-hidden border border-gray-700">
+                              <img
+                                src={image.preview}
+                                alt={image.name || image.file?.name || 'Gallery image'}
+                                className="w-full h-24 object-cover"
+                                onError={() => {
+                                  // Auto-clean invalid persisted URLs so broken slots don't linger.
+                                  if (!image.preview.startsWith('blob:')) {
+                                    removeGalleryImage(image.id);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeGalleryImage(image.id);
+                                }}
+                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black"
+                                aria-label="Remove image"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsGalleryDragActive(true);
+                        }}
+                        onDragLeave={() => setIsGalleryDragActive(false)}
+                        onDrop={handleGalleryDrop}
+                        className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors cursor-pointer mt-3 ${
+                          isGalleryDragActive
+                            ? 'border-primary bg-primary/10'
+                            : 'border-gray-700 hover:border-gray-500 bg-gray-800/50'
+                        }`}
+                      >
+                        <p className="text-sm text-gray-300">Drag & drop images here</p>
+                        <p className="text-xs text-gray-500 mt-1">or choose multiple images at once</p>
+                        <p className="text-xs text-gray-500 mt-2">{galleryImages.length}/5 uploaded</p>
                         <button
                           type="button"
-                          onClick={clearAllGalleryImages}
-                          className="text-xs font-medium text-red-400 hover:text-red-300"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            galleryInputRef.current?.click();
+                          }}
+                          className="mt-3 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-600"
                         >
-                          Clear All
+                          Choose Images
                         </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">Upload up to 5 images</p>
-
-                    {galleryImages.length > 0 && (
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
-                        {galleryImages.map((image) => (
-                          <div key={image.id} className="relative rounded-lg overflow-hidden border border-gray-700">
-                            <img
-                              src={image.preview}
-                              alt={image.name || image.file?.name || 'Gallery image'}
-                              className="w-full h-24 sm:h-28 object-cover"
-                              onError={() => {
-                                // Auto-clean invalid persisted URLs so broken slots don't linger.
-                                if (!image.preview.startsWith('blob:')) {
-                                  removeGalleryImage(image.id);
-                                }
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeGalleryImage(image.id);
-                              }}
-                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black"
-                              aria-label="Remove image"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
+                        <input
+                          ref={galleryInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleGalleryFileChange}
+                        />
                       </div>
-                    )}
 
-                    <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsGalleryDragActive(true);
-                      }}
-                      onDragLeave={() => setIsGalleryDragActive(false)}
-                      onDrop={handleGalleryDrop}
-                      className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors cursor-pointer mt-3 ${
-                        isGalleryDragActive
-                          ? 'border-primary bg-primary/10'
-                          : 'border-gray-700 hover:border-gray-500 bg-gray-800/50'
-                      }`}
-                    >
-                      <p className="text-sm text-gray-300">Drag & drop images here</p>
-                      <p className="text-xs text-gray-500 mt-1">or choose multiple images at once</p>
-                      <p className="text-xs text-gray-500 mt-2">{galleryImages.length}/5 uploaded</p>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          galleryInputRef.current?.click();
-                        }}
-                        className="mt-3 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-600"
+                        onClick={handleSaveGallery}
+                        disabled={isSavingGallery || !isGalleryDirty}
+                        className={`mt-3 w-full py-2 text-sm font-semibold rounded-lg transition-colors ${
+                          isSavingGallery || !isGalleryDirty
+                            ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                            : 'bg-primary hover:bg-secondary text-black'
+                        }`}
                       >
-                        Choose Images
+                        {isSavingGallery
+                          ? (hasSavedGallery ? 'Updating Images...' : 'Saving Images...')
+                          : (hasSavedGallery ? 'Update Images' : 'Save Images')}
                       </button>
-                      <input
-                        ref={galleryInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleGalleryFileChange}
-                      />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleSaveGallery}
-                      disabled={isSavingGallery || !isGalleryDirty}
-                      className={`mt-3 w-full py-2 text-sm font-semibold rounded-lg transition-colors ${
-                        isSavingGallery || !isGalleryDirty
-                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                          : 'bg-primary hover:bg-secondary text-black'
-                      }`}
-                    >
-                      {isSavingGallery
-                        ? (hasSavedGallery ? 'Updating Images...' : 'Saving Images...')
-                        : (hasSavedGallery ? 'Update Images' : 'Save Images')}
-                    </button>
+                    {/* Media Kit */}
+                    <MediaKitCard profile={userData} />
                   </div>
                 </div>
 
